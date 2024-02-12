@@ -1,0 +1,27 @@
+[package]
+name = "bingo"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "bingo-server"
+path = "src/server/main.rs"
+
+[[bin]]
+name = "bingo-client"
+path = "src/client/main.rs"
+
+[dependencies]
+bevy = "0.12.1"
+bevy_quinnet = "0.6.0"
+rand = "0.8.5"
+serde = "1.0.196"
+thiserror = "1.0.57"
+toml = { version = "0.8.10", features = ["display", "parse"] }
+tokio = { version = "1.29.1", features = ["sync"] }
+
+[profile.dev.package."*"]
+debug = false
+opt-level = 3
+debug-assertions = false
+overflow-checks = false
