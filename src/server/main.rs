@@ -62,20 +62,21 @@ fn handle_client_messages(
     for client_id in endpoint.clients() {
         while let Some(message) = endpoint.try_receive_message_from::<ClientMessage>(client_id) {
             match message {
-                ClientMessage::Join { name } => {
+                ClientMessage::Join { name: username } => {
                     if clients.data.contains_key(&client_id) {
                         warn!(
                             "Received a Join from an already connected client: {}",
                             client_id
-                        )
+                        );
+                        endpoint.disconnect_client(client_id).unwrap();
                     } else {
-                        info!("{} connected", name);
+                        info!("{} connected", username);
                         let is_host = clients.data.is_empty();
                         clients.data.insert(
                             client_id,
                             ClientProps {
                                 is_host,
-                                name: name.clone(),
+                                username: username.clone(),
                                 team: None,
                             },
                         );
@@ -92,7 +93,7 @@ fn handle_client_messages(
                 ClientMessage::ChangeTeam(new_team) => {
                     let client = clients.data.get_mut(&client_id).unwrap();
                     client.team = new_team;
-                    info!("{} changed team to {:?}", client.name, client.team);
+                    info!("{} changed team to {:?}", client.username, client.team);
                     broadcast_clients(endpoint, &clients);
                 }
                 ClientMessage::UpdateActivity {
@@ -103,15 +104,15 @@ fn handle_client_messages(
                 } => {
                     let client = clients.data.get_mut(&client_id).unwrap();
                     info!(
-                        "{} changed activity for team {} at {}, {} to {}",
-                        client.name, team, x, y, is_active
+                        "{} changed activity for team {:?} at {}, {} to {}",
+                        client.username, team, x, y, is_active
                     );
-                    let offset = x as usize * board.0.y_size as usize + y as usize;
-                    let activity = &mut board.0.activity[offset];
-                    match is_active {
-                        true => activity.insert(team),
-                        false => activity.remove(&team),
+                    let activity = board.activity_mut(x, y);
+                    match !is_active {
+                        true => activity.remove(&team),
+                        false => activity.insert(team),
                     };
+
                     broadcast_board_activity(
                         &endpoint,
                         &clients,
@@ -127,6 +128,7 @@ fn handle_client_messages(
                     }
                     let flat_size = new_board.prompts.len();
                     board.0 = Board {
+                        mode: new_board.mode,
                         x_size: new_board.x_size,
                         y_size: new_board.y_size,
                         prompts: new_board.prompts.clone(),
@@ -174,7 +176,7 @@ fn handle_disconnect(endpoint: &mut Endpoint, clients: &mut ResMut<Clients>, cli
             }
         }
         broadcast_clients(endpoint, &clients);
-        info!("{} disconnected", client.name);
+        info!("{} disconnected", client.username);
     } else {
         warn!(
             "Received a Disconnect from an unknown or disconnected client: {}",

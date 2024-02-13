@@ -4,9 +4,7 @@ use bevy::{app::AppExit, prelude::*, window::PrimaryWindow};
 use bevy_egui::{EguiContext, EguiPlugin};
 
 use crate::{
-    connecting::ConnectEvent,
-    states::AppState,
-    userdata::{Userdata, UserdataPlugin},
+    connecting::ConnectEvent, states::AppState, ui::root_element, userdata::{Userdata, UserdataPlugin}
 };
 
 pub struct MenuUiPlugin;
@@ -56,17 +54,19 @@ fn main_menu_ui(
     let addr: Option<SocketAddr> = userdata.addr.parse().ok();
     let valid_username = validate_username(&userdata.username);
 
-    egui::CentralPanel::default().show(ctx.get_mut(), |ui| {
-        egui::Grid::new("Menu Grid").num_columns(2).show(ui, |ui| {
-            ui.label("Username:");
-            add_validated_textbox(ui, valid_username, &mut userdata.username)
-                .on_hover_text("4-32 alphanumerics");
-            ui.end_row();
+    root_element(ctx.get_mut(), |ui| {
+        egui::Grid::new("Main Menu Grid")
+            .num_columns(2)
+            .show(ui, |ui| {
+                ui.label("Username:");
+                add_validated_textbox(ui, valid_username, &mut userdata.username)
+                    .on_hover_text("4-32 alphanumerics");
+                ui.end_row();
 
-            ui.label("Address:");
-            add_validated_textbox(ui, addr.is_some(), &mut userdata.addr);
-            ui.end_row();
-        });
+                ui.label("Address:");
+                add_validated_textbox(ui, addr.is_some(), &mut userdata.addr);
+                ui.end_row();
+            });
 
         ui.vertical_centered(|ui| {
             let connect = ui

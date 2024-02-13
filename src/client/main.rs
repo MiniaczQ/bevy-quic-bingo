@@ -5,7 +5,7 @@ mod game_ui;
 mod menu_ui;
 mod scoped;
 mod states;
-mod teams;
+mod ui;
 mod userdata;
 
 use bevy::{
@@ -34,7 +34,7 @@ fn main() {
             primary_window: Some(Window {
                 title: "Menu".into(),
                 resizable: false,
-                resolution: WindowResolution::new(200.0, 100.0),
+                resolution: WindowResolution::new(400.0, 300.0),
                 ..default()
             }),
             exit_condition: ExitCondition::OnPrimaryClosed,
@@ -43,7 +43,6 @@ fn main() {
         .add_plugins(MenuUiPlugin)
         .add_plugins(ConnectionPlugin)
         .add_plugins(GameUiPlugin)
-        .insert_resource(Clients::default())
         .add_state::<AppState>()
         .entity_scope::<AppState>()
         .add_systems(Startup, setup_camera)

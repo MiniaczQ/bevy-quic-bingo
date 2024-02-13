@@ -3,15 +3,17 @@ use std::collections::{HashMap, HashSet};
 use bevy_quinnet::shared::ClientId;
 use serde::{Deserialize, Serialize};
 
+use super::{bingo::Mode, teams::Team};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClientMessage {
     Join {
         name: String,
     },
     Disconnect {},
-    ChangeTeam(Option<u8>),
+    ChangeTeam(Option<Team>),
     UpdateActivity {
-        team: u8,
+        team: Team,
         x: u8,
         y: u8,
         is_active: bool,
@@ -22,6 +24,7 @@ pub enum ClientMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BoardPrompts {
+    pub mode: Mode,
     pub x_size: u8,
     pub y_size: u8,
     pub prompts: Vec<String>,
@@ -29,14 +32,14 @@ pub struct BoardPrompts {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BoardActivity {
-    pub activity: Vec<HashSet<u8>>,
+    pub activity: Vec<HashSet<Team>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientProps {
     pub is_host: bool,
-    pub name: String,
-    pub team: Option<u8>,
+    pub username: String,
+    pub team: Option<Team>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
