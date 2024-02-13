@@ -1,3 +1,4 @@
+use bevy::reflect::ListIter;
 use egui::Color32;
 use serde::{Deserialize, Serialize};
 
@@ -25,5 +26,19 @@ impl Team {
             Team::Purple => Color32::from_rgb(186, 85, 211),
             Team::Yellow => Color32::YELLOW,
         }
+    }
+
+    pub fn iter() -> std::slice::Iter<'static, Self> {
+        [
+            Self::Red,
+            Self::Green,
+            Self::Blue,
+            Self::Cyan,
+            Self::Pink,
+            Self::Magenta,
+            Self::Purple,
+            Self::Yellow,
+        ]
+        .iter()
     }
 }

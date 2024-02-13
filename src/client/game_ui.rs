@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use bevy::{
     prelude::*,
     render::camera::RenderTarget,
@@ -5,6 +7,7 @@ use bevy::{
 };
 use bevy_egui::EguiContext;
 use bevy_quinnet::client::Client;
+use egui::{LayerId, RichText};
 
 use crate::{
     common::{
@@ -65,17 +68,18 @@ fn teams_selector(ui: &mut egui::Ui, client_props: &mut ClientProps) -> bool {
             .clicked();
 
         egui::Grid::new("Game Team Grid").show(ui, |ui| {
-            clicked |= team_to_ui(ui, &mut client_props.team, Some(Team::Blue)).clicked();
-            clicked |= team_to_ui(ui, &mut client_props.team, Some(Team::Cyan)).clicked();
-            clicked |= team_to_ui(ui, &mut client_props.team, Some(Team::Green)).clicked();
-            clicked |= team_to_ui(ui, &mut client_props.team, Some(Team::Magenta)).clicked();
-            ui.end_row();
-
-            clicked |= team_to_ui(ui, &mut client_props.team, Some(Team::Pink)).clicked();
-            clicked |= team_to_ui(ui, &mut client_props.team, Some(Team::Purple)).clicked();
-            clicked |= team_to_ui(ui, &mut client_props.team, Some(Team::Red)).clicked();
-            clicked |= team_to_ui(ui, &mut client_props.team, Some(Team::Yellow)).clicked();
-            ui.end_row();
+            let mut iter = Team::iter();
+            for _ in 0..2 {
+                for _ in 0..4 {
+                    clicked |= team_to_ui(
+                        ui,
+                        &mut client_props.team,
+                        Some(iter.next().unwrap().clone()),
+                    )
+                    .clicked();
+                }
+                ui.end_row()
+            }
         });
     });
     clicked
@@ -99,8 +103,11 @@ fn game_menu_ui(
         egui::Grid::new("Game Menu Grid")
             .num_columns(2)
             .show(ui, |ui| {
-                ui.label("Connected as:");
-                ui.label(&client_props.username);
+                ui.label("Username:");
+                ui.add_enabled(
+                    false,
+                    egui::TextEdit::singleline(&mut client_props.username),
+                );
                 ui.end_row();
             });
 
@@ -178,6 +185,22 @@ fn bingo_board_ui(
     });
 }
 
+fn add_activity_ui(painter: &mut egui::Painter, board: &Board, (x, y): (u8, u8), rect: egui::Rect) {
+    let pos = rect.left_top();
+    let size = rect.size();
+    let (x_step, y_step) = (size.x / 5.0, size.y / 5.0);
+    let base = pos + egui::Vec2::new(x_step, y_step);
+    let radius = x_step.min(y_step) / 3.0;
+    for (i, team) in Team::iter().enumerate() {
+        if board.activity(x, y).contains(&team) {
+            let x_offset = (i % 4) as f32 * x_step;
+            let y_offset = (i / 4) as f32 * y_step * 4.0;
+            let pos = base + egui::Vec2::new(x_offset, y_offset);
+            painter.circle_filled(pos, radius, team.color());
+        }
+    }
+}
+
 fn add_bingo_field(
     ui: &mut egui::Ui,
     board: &mut Board,
@@ -185,14 +208,12 @@ fn add_bingo_field(
     client: &Client,
     (x, y): (u8, u8),
 ) {
-    let pos = ui.next_widget_position();
-    let clicked = ui
-        .add_sized(
-            egui::Vec2::new(50.0, 50.0),
-            egui::Button::new(board.prompt(x, y)),
-        )
-        .clicked();
-    ui.add(egui::)
+    let size = 50.0;
+    let size2d = egui::Vec2::new(size, size);
+    let btn = ui.add_sized(size2d, egui::Button::new(board.prompt(x, y)).rounding(0.0));
+    let clicked = btn.clicked();
+    let mut painter = ui.painter_at(btn.rect);
+    add_activity_ui(&mut painter, board, (x, y), btn.rect);
 
     if client_props.team.is_some() && clicked {
         let team = client_props.team.unwrap();
