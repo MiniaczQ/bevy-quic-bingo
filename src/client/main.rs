@@ -3,19 +3,22 @@ mod common;
 mod connecting;
 mod game_ui;
 mod menu_ui;
+mod scoped;
 mod states;
 mod teams;
-mod util;
+mod userdata;
 
-use bevy::prelude::*;
+use bevy::{
+    prelude::*,
+    window::{ExitCondition, WindowResolution},
+};
 use bevy_quinnet::shared::ClientId;
-use bevy_simple_text_input::TextInputPlugin;
 use connecting::ConnectionPlugin;
 use game_ui::GameUiPlugin;
 use menu_ui::MenuUiPlugin;
+use scoped::ScopedExt;
 use states::AppState;
 use std::collections::HashMap;
-use util::ScopedExt;
 
 use common::protocol::ClientProps;
 
@@ -27,8 +30,16 @@ struct Clients {
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
-        .add_plugins(TextInputPlugin)
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "Menu".into(),
+                resizable: false,
+                resolution: WindowResolution::new(200.0, 100.0),
+                ..default()
+            }),
+            exit_condition: ExitCondition::OnPrimaryClosed,
+            ..default()
+        }))
         .add_plugins(MenuUiPlugin)
         .add_plugins(ConnectionPlugin)
         .add_plugins(GameUiPlugin)

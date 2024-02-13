@@ -1,4 +1,4 @@
-use std::{thread::sleep, time::Duration};
+use std::{net::SocketAddr, str::FromStr, thread::sleep, time::Duration};
 
 use bevy::{app::AppExit, prelude::*};
 use bevy_quinnet::client::{
@@ -14,25 +14,27 @@ use crate::{
     Clients,
 };
 
+#[derive(Event)]
+pub struct ConnectEvent {
+    pub username: String,
+    pub addr: SocketAddr,
+}
+
 pub struct ConnectionPlugin;
 
 impl Plugin for ConnectionPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(QuinnetClientPlugin::default())
-            .add_systems(OnEnter(AppState::Connecting), start_connection)
+        app.add_event::<ConnectEvent>()
+            .add_plugins(QuinnetClientPlugin::default())
             .add_systems(
                 Update,
-                (handle_server_messages, handle_client_events).run_if(connecting_or_playing),
+                start_connection.run_if(in_state(AppState::MainMenu)),
             )
-            .add_systems(PostUpdate, on_app_exit);
-    }
-}
-
-fn connecting_or_playing(state: Res<State<AppState>>) -> bool {
-    match state.get() {
-        AppState::Menu => false,
-        AppState::Connecting => true,
-        AppState::Playing => true,
+            .add_systems(
+                Update,
+                (handle_server_messages, handle_client_events).run_if(in_state(AppState::Playing)),
+            )
+            .add_systems(PostUpdate, on_app_exit.run_if(in_state(AppState::Playing)));
     }
 }
 
@@ -71,13 +73,29 @@ fn handle_server_messages(
     }
 }
 
-fn start_connection(mut client: ResMut<Client>) {
-    client
-        .open_connection(
-            ConnectionConfiguration::from_strings("127.0.0.1:6000", "0.0.0.0:0").unwrap(),
-            CertificateVerificationMode::SkipVerification,
-        )
-        .unwrap();
+fn start_connection(
+    mut client: ResMut<Client>,
+    mut state: ResMut<NextState<AppState>>,
+    mut events: EventReader<ConnectEvent>,
+) {
+    for event in events.read() {
+        state.set(AppState::Playing);
+        client
+            .open_connection(
+                ConnectionConfiguration::from_addrs(
+                    event.addr,
+                    SocketAddr::from_str("0.0.0.0:0").unwrap(),
+                ),
+                CertificateVerificationMode::SkipVerification,
+            )
+            .unwrap();
+        client
+            .connection()
+            .send_message(ClientMessage::Join {
+                name: event.username.clone(),
+            })
+            .unwrap()
+    }
 }
 
 fn handle_client_events(

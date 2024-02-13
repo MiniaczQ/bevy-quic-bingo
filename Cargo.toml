@@ -19,9 +19,8 @@ serde = "1.0.196"
 thiserror = "1.0.57"
 toml = { version = "0.8.10", features = ["display", "parse"] }
 tokio = { version = "1.29.1", features = ["sync"] }
-bevy_simple_text_input = { git = "https://github.com/rparrett/bevy_simple_text_input", rev = "b94f978ed4249c873177c822a278bf623ba96c86" }
 bevy_egui = "0.24.0"
-egui = "0.26.1"
+egui = "0.24.0"
 
 [profile.dev.package."*"]
 debug = false

@@ -1,183 +1,96 @@
-use bevy::{ecs::system::EntityCommands, prelude::*};
-use bevy_simple_text_input::TextInputBundle;
+use std::net::SocketAddr;
 
-use bevy::app::AppExit;
+use bevy::{app::AppExit, prelude::*, window::PrimaryWindow};
+use bevy_egui::{EguiContext, EguiPlugin};
 
-use crate::{states::AppState, util::scoped::Scoped};
+use crate::{
+    connecting::ConnectEvent,
+    states::AppState,
+    userdata::{Userdata, UserdataPlugin},
+};
 
 pub struct MenuUiPlugin;
 
-#[derive(Component, Copy, Clone, Debug, PartialEq)]
-enum UiInput {
-    Play,
-    Exit,
-}
-
 impl Plugin for MenuUiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(ButtonsPlugin);
-        app.add_systems(OnEnter(AppState::Menu), setup);
-        app.add_systems(Update, input.run_if(in_state(AppState::Menu)));
+        app.add_plugins(EguiPlugin)
+            .add_plugins(UserdataPlugin)
+            .add_systems(Update, main_menu_ui.run_if(in_state(AppState::MainMenu)));
     }
 }
 
-fn input(
-    mut exit: EventWriter<AppExit>,
-    mut app: ResMut<NextState<AppState>>,
-    mut q: Query<(&Interaction, &UiInput), (Changed<Interaction>, With<Button>)>,
-) {
-    for (interaction, menu_button) in &mut q {
-        if Interaction::Pressed == *interaction {
-            match menu_button {
-                UiInput::Play => app.set(AppState::Connecting),
-                UiInput::Exit => exit.send(AppExit),
-            }
+fn validate_username(username: &str) -> bool {
+    if username.len() < 4 || username.len() > 32 {
+        return false;
+    }
+    for c in username.chars() {
+        if !c.is_alphanumeric() {
+            return false;
         }
     }
+    true
 }
 
-fn setup(mut commands: Commands) {
-    let ui_root = commands
-        .spawn((
-            Scoped(AppState::Menu),
-            Name::new("ui-root"),
-            NodeBundle {
-                style: Style {
-                    width: Val::Percent(100.),
-                    height: Val::Percent(100.),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-                ..default()
-            },
-        ))
-        .id();
-
-    let list = commands
-        .spawn((
-            Name::new("ui-button-list"),
-            NodeBundle {
-                style: Style {
-                    flex_direction: FlexDirection::Column,
-                    ..default()
-                },
-                ..default()
-            },
-        ))
-        .set_parent(ui_root)
-        .id();
-
-    commands
-        .entity(list)
-        .with_children(|c| {
-            c.spawn(NodeBundle {
-                style: Style {
-                    flex_direction: FlexDirection::Row,
-                    ..default()
-                },
-                ..default()
-            })
-            .with_children(|c| {
-                c.spawn(TextBundle::from_section(
-                    "Host Address",
-                    TextStyle {
-                        font_size: 40.0,
-                        color: Color::rgb(0.9, 0.9, 0.9),
-                        ..default()
-                    },
-                ));
-                c.spawn((
-                    NodeBundle {
-                        style: Style {
-                            width: Val::Px(200.0),
-                            border: UiRect::all(Val::Px(5.0)),
-                            padding: UiRect::all(Val::Px(5.0)),
-                            ..default()
-                        },
-                        border_color: BorderColor(Color::BLACK),
-                        background_color: Color::RED.into(),
-                        ..default()
-                    },
-                    TextInputBundle::new(TextStyle::default()),
-                ));
-            });
-        })
-        .with_button("Connect", (Name::new("ui-play"), UiInput::Play))
-        .with_button("Exit", (Name::new("ui-exit"), UiInput::Exit));
+fn add_validated_textbox(
+    ui: &mut egui::Ui,
+    id_valid: bool,
+    buffer: &mut dyn egui::TextBuffer,
+) -> egui::Response {
+    ui.add(egui::TextEdit::singleline(buffer).text_color(if id_valid {
+        egui::Color32::WHITE
+    } else {
+        egui::Color32::RED
+    }))
 }
 
-const NORMAL_BUTTON: Color = Color::rgb(0.15, 0.15, 0.15);
-const HOVERED_BUTTON: Color = Color::rgb(0.25, 0.25, 0.25);
-const PRESSED_BUTTON: Color = Color::rgb(0.35, 0.75, 0.35);
-
-pub struct ButtonsPlugin;
-
-impl Plugin for ButtonsPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Update, update_buttons);
-    }
-}
-
-#[derive(Component)]
-pub struct AnimatedButton;
-
-fn update_buttons(
-    mut interaction_query: Query<
-        (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<Button>, With<AnimatedButton>),
-    >,
+fn main_menu_ui(
+    mut egui_ctx: Query<&mut EguiContext, With<PrimaryWindow>>,
+    mut app_exit: EventWriter<AppExit>,
+    mut userdata: ResMut<Userdata>,
+    mut client_connect: EventWriter<ConnectEvent>,
 ) {
-    for (interaction, mut color) in &mut interaction_query {
-        match *interaction {
-            Interaction::Pressed => {
-                *color = PRESSED_BUTTON.into();
-            }
-            Interaction::Hovered => {
-                *color = HOVERED_BUTTON.into();
-            }
-            Interaction::None => {
-                *color = NORMAL_BUTTON.into();
-            }
-        }
-    }
-}
+    let Ok(mut ctx) = egui_ctx.get_single_mut() else {
+        return;
+    };
 
-pub trait ButtonExt {
-    fn with_button(&mut self, text: impl Into<String>, components: impl Bundle) -> &mut Self;
-}
+    let addr: Option<SocketAddr> = userdata.addr.parse().ok();
+    let valid_username = validate_username(&userdata.username);
 
-impl<'w, 's, 'a> ButtonExt for EntityCommands<'w, 's, 'a> {
-    fn with_button(&mut self, text: impl Into<String>, components: impl Bundle) -> &mut Self {
-        let text = text.into();
-        self.with_children(|commands| {
-            commands
-                .spawn((
-                    AnimatedButton,
-                    ButtonBundle {
-                        style: Style {
-                            width: Val::Auto,
-                            height: Val::Auto,
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            ..default()
-                        },
-                        background_color: NORMAL_BUTTON.into(),
-                        ..default()
-                    },
-                    components,
-                ))
-                .with_children(|commands| {
-                    commands.spawn(TextBundle::from_section(
-                        text,
-                        TextStyle {
-                            font_size: 40.0,
-                            color: Color::rgb(0.9, 0.9, 0.9),
-                            ..default()
-                        },
-                    ));
-                });
+    egui::CentralPanel::default().show(ctx.get_mut(), |ui| {
+        egui::Grid::new("Menu Grid").num_columns(2).show(ui, |ui| {
+            ui.label("Username:");
+            add_validated_textbox(ui, valid_username, &mut userdata.username)
+                .on_hover_text("4-32 alphanumerics");
+            ui.end_row();
+
+            ui.label("Address:");
+            add_validated_textbox(ui, addr.is_some(), &mut userdata.addr);
+            ui.end_row();
         });
-        self
-    }
+
+        ui.vertical_centered(|ui| {
+            let connect = ui
+                .add_enabled(
+                    addr.is_some() && valid_username,
+                    egui::Button::new("Connect"),
+                )
+                .clicked();
+            if connect {
+                info!(
+                    "Joining to '{:?}' with username '{}'",
+                    addr.unwrap(),
+                    userdata.username
+                );
+                client_connect.send(ConnectEvent {
+                    username: userdata.username.clone(),
+                    addr: addr.unwrap(),
+                });
+            }
+
+            let exit = ui.button("Exit").clicked();
+            if exit {
+                app_exit.send(AppExit);
+            }
+        });
+    });
 }
