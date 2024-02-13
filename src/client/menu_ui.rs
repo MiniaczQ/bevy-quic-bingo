@@ -1,4 +1,5 @@
 use bevy::{ecs::system::EntityCommands, prelude::*};
+use bevy_simple_text_input::TextInputBundle;
 
 use bevy::app::AppExit;
 
@@ -53,7 +54,7 @@ fn setup(mut commands: Commands) {
         ))
         .id();
 
-    commands
+    let list = commands
         .spawn((
             Name::new("ui-button-list"),
             NodeBundle {
@@ -65,7 +66,44 @@ fn setup(mut commands: Commands) {
             },
         ))
         .set_parent(ui_root)
-        .with_button("Play", (Name::new("ui-play"), UiInput::Play))
+        .id();
+
+    commands
+        .entity(list)
+        .with_children(|c| {
+            c.spawn(NodeBundle {
+                style: Style {
+                    flex_direction: FlexDirection::Row,
+                    ..default()
+                },
+                ..default()
+            })
+            .with_children(|c| {
+                c.spawn(TextBundle::from_section(
+                    "Host Address",
+                    TextStyle {
+                        font_size: 40.0,
+                        color: Color::rgb(0.9, 0.9, 0.9),
+                        ..default()
+                    },
+                ));
+                c.spawn((
+                    NodeBundle {
+                        style: Style {
+                            width: Val::Px(200.0),
+                            border: UiRect::all(Val::Px(5.0)),
+                            padding: UiRect::all(Val::Px(5.0)),
+                            ..default()
+                        },
+                        border_color: BorderColor(Color::BLACK),
+                        background_color: Color::RED.into(),
+                        ..default()
+                    },
+                    TextInputBundle::new(TextStyle::default()),
+                ));
+            });
+        })
+        .with_button("Connect", (Name::new("ui-play"), UiInput::Play))
         .with_button("Exit", (Name::new("ui-exit"), UiInput::Exit));
 }
 

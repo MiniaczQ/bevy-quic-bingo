@@ -8,11 +8,14 @@ mod teams;
 mod util;
 
 use bevy::prelude::*;
-use bevy_quinnet::{client::QuinnetClientPlugin, shared::ClientId};
+use bevy_quinnet::shared::ClientId;
+use bevy_simple_text_input::TextInputPlugin;
+use connecting::ConnectionPlugin;
 use game_ui::GameUiPlugin;
 use menu_ui::MenuUiPlugin;
 use states::AppState;
 use std::collections::HashMap;
+use util::ScopedExt;
 
 use common::protocol::ClientProps;
 
@@ -25,11 +28,13 @@ struct Clients {
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(QuinnetClientPlugin::default())
+        .add_plugins(TextInputPlugin)
         .add_plugins(MenuUiPlugin)
+        .add_plugins(ConnectionPlugin)
         .add_plugins(GameUiPlugin)
         .insert_resource(Clients::default())
         .add_state::<AppState>()
+        .entity_scope::<AppState>()
         .add_systems(Startup, setup_camera)
         .run();
 }

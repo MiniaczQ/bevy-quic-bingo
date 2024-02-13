@@ -1,11 +1,10 @@
 use std::{thread::sleep, time::Duration};
 
 use bevy::{app::AppExit, prelude::*};
-use bevy_quinnet::{
-    client::{
-        certificate::CertificateVerificationMode, connection::ConnectionConfiguration, Client,
-    },
-    server::ConnectionEvent,
+use bevy_quinnet::client::{
+    certificate::CertificateVerificationMode,
+    connection::{ConnectionConfiguration, ConnectionEvent},
+    Client, QuinnetClientPlugin,
 };
 use rand::{distributions::Alphanumeric, Rng};
 
@@ -19,9 +18,21 @@ pub struct ConnectionPlugin;
 
 impl Plugin for ConnectionPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(AppState::Connecting), start_connection)
-            .add_systems(Update, (handle_server_messages, handle_client_events))
+        app.add_plugins(QuinnetClientPlugin::default())
+            .add_systems(OnEnter(AppState::Connecting), start_connection)
+            .add_systems(
+                Update,
+                (handle_server_messages, handle_client_events).run_if(connecting_or_playing),
+            )
             .add_systems(PostUpdate, on_app_exit);
+    }
+}
+
+fn connecting_or_playing(state: Res<State<AppState>>) -> bool {
+    match state.get() {
+        AppState::Menu => false,
+        AppState::Connecting => true,
+        AppState::Playing => true,
     }
 }
 
@@ -48,6 +59,7 @@ fn handle_server_messages(
         match message {
             ServerMessage::InitClient(self_id) => {
                 clients.self_id = self_id;
+                info!("Connected with id {}", self_id);
                 state.set(AppState::Playing);
             }
             ServerMessage::UpdateClientList(new_clients) => {
