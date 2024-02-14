@@ -1,4 +1,5 @@
 use bevy::{
+    audio::Volume,
     prelude::*,
     render::camera::RenderTarget,
     window::{PresentMode, PrimaryWindow, WindowRef, WindowResolution},
@@ -484,7 +485,7 @@ fn play_win_sfx(
             TeamWonSfx,
             AudioBundle {
                 source,
-                settings: PlaybackSettings::ONCE,
+                settings: PlaybackSettings::ONCE.with_volume(Volume::new_relative(0.5)),
             },
         ));
     }
