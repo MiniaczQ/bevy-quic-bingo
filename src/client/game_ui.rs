@@ -8,7 +8,7 @@ use bevy_quinnet::client::Client;
 
 use crate::{
     common::{
-        bingo::{Board, Mode},
+        bingo::{Board, Mode, WinCondition},
         protocol::{BoardPrompts, ClientMessage, ClientProps},
         teams::Team,
         BoardRes,
@@ -87,6 +87,29 @@ fn teams_selector(ui: &mut egui::Ui, client_props: &mut ClientProps) -> bool {
 const HOST_ICON: &str = "★";
 const KICK_ICON: &str = "🗑";
 
+#[derive(Debug, PartialEq, Eq)]
+enum WinConditionFlat {
+    InRow,
+    Domination,
+    FirstTo,
+}
+
+fn flatten_win_contition(value: WinCondition) -> WinConditionFlat {
+    match value {
+        WinCondition::InRow { length: _, rows: _ } => WinConditionFlat::InRow,
+        WinCondition::Domination => WinConditionFlat::Domination,
+        WinCondition::FirstTo(_) => WinConditionFlat::FirstTo,
+    }
+}
+
+fn unflatten_win_contition(value: WinConditionFlat) -> WinCondition {
+    match value {
+        WinConditionFlat::InRow => WinCondition::InRow { length: 5, rows: 1 },
+        WinConditionFlat::Domination => WinCondition::Domination,
+        WinConditionFlat::FirstTo => WinCondition::FirstTo(13),
+    }
+}
+
 fn game_menu_ui(
     mut egui_ctx: Query<&mut EguiContext, With<PrimaryWindow>>,
     mut disconnect_events: EventWriter<DisconnectEvent>,
@@ -146,30 +169,93 @@ fn game_menu_ui(
                 .try_send_message(ClientMessage::ChangeTeam(self_props.team));
         }
 
+        ui.separator();
+        ui.label("Game Settings");
+        ui.separator();
         if self_props.is_host {
-            ui.separator();
-            ui.label("Game mode");
-            ui.separator();
+            let mut mode_changed = false;
+            let mut win_condition_changed = false;
 
+            // Mode
             ui.horizontal(|ui| {
-                let mut changed = false;
-                changed |= ui
+                mode_changed |= ui
                     .selectable_value(&mut board.mode, Mode::FFA, "FFA")
                     .clicked();
-                changed |= ui
+                mode_changed |= ui
                     .selectable_value(&mut board.mode, Mode::Lockout, "Lockout")
                     .clicked();
-                if changed {
-                    client
-                        .connection()
-                        .try_send_message(ClientMessage::UpdateBoard(BoardPrompts {
-                            mode: board.mode,
-                            x_size: board.x_size,
-                            y_size: board.y_size,
-                            prompts: board.prompts.clone(),
-                        }));
+            });
+            if mode_changed
+                && board.mode != Mode::Lockout
+                && board.win_condition == WinCondition::Domination
+            {
+                board.win_condition = unflatten_win_contition(WinConditionFlat::InRow);
+                win_condition_changed = true;
+            }
+
+            // Win condition
+            let mut flat_win_condition = flatten_win_contition(board.win_condition);
+            ui.horizontal(|ui| {
+                win_condition_changed |= ui
+                    .selectable_value(
+                        &mut flat_win_condition,
+                        WinConditionFlat::InRow,
+                        "N rows of M",
+                    )
+                    .clicked();
+                if board.mode == Mode::Lockout {
+                    win_condition_changed |= ui
+                        .selectable_value(
+                            &mut flat_win_condition,
+                            WinConditionFlat::Domination,
+                            "Domination",
+                        )
+                        .clicked();
+                }
+                win_condition_changed |= ui
+                    .selectable_value(
+                        &mut flat_win_condition,
+                        WinConditionFlat::FirstTo,
+                        "First to N",
+                    )
+                    .clicked();
+            });
+            if win_condition_changed {
+                board.win_condition = unflatten_win_contition(flat_win_condition);
+            }
+            egui::Grid::new("Win Condition Grid").show(ui, |ui| match &mut board.win_condition {
+                WinCondition::InRow {
+                    ref mut length,
+                    ref mut rows,
+                } => {
+                    ui.label("Row length");
+                    win_condition_changed |=
+                        ui.add(egui::DragValue::new(length).speed(0.03)).changed();
+                    ui.end_row();
+                    ui.label("Row count");
+                    win_condition_changed |=
+                        ui.add(egui::DragValue::new(rows).speed(0.03)).changed();
+                    ui.end_row();
+                }
+                WinCondition::Domination => {}
+                WinCondition::FirstTo(ref mut n) => {
+                    ui.label("First to");
+                    win_condition_changed |= ui.add(egui::DragValue::new(n).speed(0.03)).changed();
+                    ui.end_row();
                 }
             });
+
+            if mode_changed || win_condition_changed {
+                client
+                    .connection()
+                    .try_send_message(ClientMessage::UpdateBoard(BoardPrompts {
+                        mode: board.mode,
+                        win_condition: board.win_condition,
+                        x_size: board.x_size,
+                        y_size: board.y_size,
+                        prompts: board.prompts.clone(),
+                    }));
+            }
 
             let reset = ui.button("Reset Board").clicked();
             if reset {
@@ -178,12 +264,8 @@ fn game_menu_ui(
                     .try_send_message(ClientMessage::ResetActivity);
             }
         } else {
-            ui.separator();
-            ui.horizontal(|ui| {
-                ui.label("Game mode");
-                ui.label(format!("{:?}", board.mode));
-            });
-            ui.separator();
+            ui.label(format!("Mode: {:?}", board.mode));
+            ui.label(format!("Win condition: {}", board.win_condition));
         }
     });
 }
@@ -296,6 +378,7 @@ fn add_bingo_field(
     if client_props.team.is_some() && clicked {
         let team = client_props.team.unwrap();
         let mode = board.mode;
+        let win = board.check_win();
         let activity = board.activity_mut(x, y);
         let was_active = activity.contains(&team);
         let mut change = false;
@@ -305,7 +388,7 @@ fn add_bingo_field(
                 change = true;
             }
             false => {
-                if mode != Mode::Lockout || activity.is_empty() {
+                if (mode != Mode::Lockout || activity.is_empty()) && win.is_none() {
                     activity.insert(team);
                     change = true;
                 }

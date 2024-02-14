@@ -36,7 +36,7 @@ fn main() {
             primary_window: Some(Window {
                 title: "Menu".into(),
                 resizable: false,
-                resolution: WindowResolution::new(400.0, 300.0),
+                resolution: WindowResolution::new(400.0, 500.0),
                 ..default()
             }),
             exit_condition: ExitCondition::OnPrimaryClosed,

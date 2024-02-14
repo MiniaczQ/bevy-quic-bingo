@@ -97,6 +97,7 @@ fn handle_client_messages(
                                 client_id,
                                 ServerMessage::UpdateBoardPrompts(BoardPrompts {
                                     mode: board.0.mode,
+                                    win_condition: board.0.win_condition,
                                     x_size: board.0.x_size,
                                     y_size: board.0.y_size,
                                     prompts: board.0.prompts.clone(),
@@ -136,15 +137,11 @@ fn handle_client_messages(
                         client.username, team, x, y, is_active
                     );
                     let mode = board.0.mode;
+                    let win = board.check_win();
                     let activity = board.activity_mut(x, y);
-                    info!(
-                        "{mode:?} {activity:?} {} {}",
-                        mode != Mode::Lockout,
-                        activity.is_empty()
-                    );
                     match is_active {
                         true => {
-                            if mode != Mode::Lockout || activity.is_empty() {
+                            if (mode != Mode::Lockout || activity.is_empty()) && win.is_none() {
                                 activity.insert(team);
                             }
                         }
@@ -152,6 +149,10 @@ fn handle_client_messages(
                             activity.remove(&team);
                         }
                     };
+                    let win = board.check_win();
+                    if let Some(win) = win {
+                        info!("Winner: {:?}", win);
+                    }
 
                     broadcast_board_activity(
                         &endpoint,
@@ -169,11 +170,13 @@ fn handle_client_messages(
                     let flat_size = new_board.prompts.len();
                     board.0 = Board {
                         mode: new_board.mode,
+                        win_condition: new_board.win_condition,
                         x_size: new_board.x_size,
                         y_size: new_board.y_size,
                         prompts: new_board.prompts.clone(),
                         activity: vec![HashSet::default(); flat_size],
                     };
+                    info!("{:?}", new_board.win_condition);
                     broadcast_board_prompts(&endpoint, &clients, new_board);
                 }
                 ClientMessage::ResetActivity => {

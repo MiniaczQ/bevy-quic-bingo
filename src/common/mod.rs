@@ -5,7 +5,7 @@ use std::{
 
 use bevy::prelude::*;
 
-use self::bingo::{Board, Mode};
+use self::bingo::{Board, Mode, WinCondition};
 
 pub mod bingo;
 pub mod protocol;
@@ -18,6 +18,7 @@ impl Default for BoardRes {
     fn default() -> Self {
         Self(Board {
             mode: Mode::FFA,
+            win_condition: WinCondition::InRow { length: 5, rows: 1 },
             x_size: 5,
             y_size: 5,
             prompts: vec![String::from("boop"); 25],

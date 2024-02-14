@@ -3,7 +3,10 @@ use std::collections::{HashMap, HashSet};
 use bevy_quinnet::shared::ClientId;
 use serde::{Deserialize, Serialize};
 
-use super::{bingo::Mode, teams::Team};
+use super::{
+    bingo::{Mode, WinCondition},
+    teams::Team,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClientMessage {
@@ -26,6 +29,7 @@ pub enum ClientMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BoardPrompts {
     pub mode: Mode,
+    pub win_condition: WinCondition,
     pub x_size: u8,
     pub y_size: u8,
     pub prompts: Vec<String>,

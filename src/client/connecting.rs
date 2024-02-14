@@ -104,6 +104,7 @@ fn handle_server_messages(
                 }
                 ServerMessage::UpdateBoardPrompts(new_board) => {
                     board.mode = new_board.mode;
+                    board.win_condition = new_board.win_condition;
                     board.x_size = new_board.x_size;
                     board.y_size = new_board.y_size;
                     board.prompts = new_board.prompts;
