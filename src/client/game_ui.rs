@@ -9,10 +9,10 @@ use bevy_quinnet::client::Client;
 
 use crate::{
     common::{
-        bingo::{Board, BoardConfig, GameMode, WinCondition},
+        bingo::{Board, GameMode, WinCondition},
         protocol::{ClientMessage, ClientProps},
         teams::Team,
-        BoardRes,
+        BoardModeRes, BoardRes,
     },
     connecting::{StopConnection, TeamWon},
     states::AppState,
@@ -45,11 +45,13 @@ impl Plugin for GameUiPlugin {
 fn add_resources(mut commands: Commands) {
     commands.insert_resource(BoardRes::default());
     commands.insert_resource(Clients::default());
+    commands.insert_resource(BoardModeRes::default());
 }
 
 fn remove_resources(mut commands: Commands) {
     commands.remove_resource::<BoardRes>();
     commands.remove_resource::<Clients>();
+    commands.remove_resource::<BoardModeRes>();
 }
 
 fn team_to_ui(ui: &mut egui::Ui, value: &mut Option<Team>, team: Option<Team>) -> egui::Response {
@@ -122,16 +124,11 @@ fn game_menu_ui(
     mut clients: ResMut<Clients>,
     client: Res<Client>,
     board: Res<BoardRes>,
-    mut board_config: Local<Option<BoardConfig>>,
+    mut mode_conf: ResMut<BoardModeRes>,
 ) {
     let Ok(mut ctx) = egui_ctx.get_single_mut() else {
         return;
     };
-
-    if board_config.is_none() {
-        *board_config = Some(board.config.clone());
-    }
-    let board_conf = board_config.as_mut().unwrap();
 
     root_element(ctx.get_mut(), |ui| {
         let self_id = clients.self_id;
@@ -197,22 +194,22 @@ fn game_menu_ui(
             // Mode
             ui.horizontal(|ui| {
                 mode_changed |= ui
-                    .selectable_value(&mut board_conf.mode.game_mode, GameMode::FFA, "FFA")
+                    .selectable_value(&mut mode_conf.game_mode, GameMode::FFA, "FFA")
                     .clicked();
                 mode_changed |= ui
-                    .selectable_value(&mut board_conf.mode.game_mode, GameMode::Lockout, "Lockout")
+                    .selectable_value(&mut mode_conf.game_mode, GameMode::Lockout, "Lockout")
                     .clicked();
             });
             if mode_changed
-                && board_conf.mode.game_mode != GameMode::Lockout
-                && board_conf.mode.win_condition == WinCondition::Domination
+                && mode_conf.game_mode != GameMode::Lockout
+                && mode_conf.win_condition == WinCondition::Domination
             {
-                board_conf.mode.win_condition = FlatWinCondition::InRow.unflatten();
+                mode_conf.win_condition = FlatWinCondition::InRow.unflatten();
                 win_condition_changed = true;
             }
 
             // Win condition
-            let mut flat_win_condition = FlatWinCondition::flatten(board_conf.mode.win_condition);
+            let mut flat_win_condition = FlatWinCondition::flatten(mode_conf.win_condition);
             ui.horizontal(|ui| {
                 win_condition_changed |= ui
                     .selectable_value(
@@ -221,7 +218,7 @@ fn game_menu_ui(
                         "N rows of M",
                     )
                     .clicked();
-                if board_conf.mode.game_mode == GameMode::Lockout {
+                if mode_conf.game_mode == GameMode::Lockout {
                     win_condition_changed |= ui
                         .selectable_value(
                             &mut flat_win_condition,
@@ -239,10 +236,10 @@ fn game_menu_ui(
                     .clicked();
             });
             if win_condition_changed {
-                board_conf.mode.win_condition = flat_win_condition.unflatten();
+                mode_conf.win_condition = flat_win_condition.unflatten();
             }
             egui::Grid::new("Win Condition Grid").show(ui, |ui| {
-                match &mut board_conf.mode.win_condition {
+                match &mut mode_conf.win_condition {
                     WinCondition::InRow {
                         ref mut length,
                         ref mut rows,
@@ -266,25 +263,14 @@ fn game_menu_ui(
 
             // Send update
             ui.horizontal(|ui| {
-                let different_mode = board_conf.mode != board.config.mode;
-                let different_prompts = board_conf.prompts != board.config.prompts;
-                let different = different_mode || different_prompts;
+                let different = **mode_conf != board.config.mode;
 
                 let restart = ui.button("Restart game").clicked();
                 if restart {
                     if different {
-                        if different_mode {
-                            client
-                                .connection()
-                                .try_send_message(ClientMessage::SetMode(board_conf.mode.clone()));
-                        }
-                        if different_prompts {
-                            client
-                                .connection()
-                                .try_send_message(ClientMessage::SetPrompts(
-                                    board_conf.prompts.clone(),
-                                ));
-                        }
+                        client
+                            .connection()
+                            .try_send_message(ClientMessage::SetMode(mode_conf.clone()));
                     } else {
                         client
                             .connection()
@@ -296,7 +282,7 @@ fn game_menu_ui(
                     .add_enabled(different, egui::Button::new("Cancel changes"))
                     .clicked();
                 if cancel {
-                    *board_conf = board.config.clone();
+                    **mode_conf = board.config.mode.clone();
                 }
             });
         }
@@ -323,7 +309,7 @@ fn create_bingo_window(
             BingoWindow,
             Window {
                 title: "Bingo Board".to_owned(),
-                resolution: WindowResolution::new(270.0, 270.0),
+                resolution: WindowResolution::new(250.0, 250.0),
                 present_mode: PresentMode::AutoVsync,
                 resizable: false,
                 ..default()
@@ -372,18 +358,24 @@ fn bingo_board_ui(
         return;
     };
 
-    egui::CentralPanel::default().show(ctx.get_mut(), |ui| {
-        egui::Grid::new("Bingo Grid")
-            .spacing(egui::Vec2::new(1.0, 1.0))
-            .show(ui, |ui| {
-                for x in 0..5 {
-                    for y in 0..5 {
-                        add_bingo_field(ui, &mut board, &client_props, &client, (x, y));
+    egui::CentralPanel::default()
+        .frame(egui::Frame::none().outer_margin(0.1))
+        .show(ctx.get_mut(), |ui| {
+            egui::Grid::new("Bingo Grid")
+                .spacing(egui::Vec2::new(1.0, 1.0))
+                .show(ui, |ui| {
+                    ui.style_mut().visuals.widgets.hovered.bg_stroke = egui::Stroke::NONE;
+                    ui.style_mut().visuals.widgets.hovered.expansion = 0.0;
+                    ui.style_mut().visuals.widgets.active.bg_stroke = egui::Stroke::NONE;
+                    ui.style_mut().visuals.widgets.active.expansion = 0.0;
+                    for x in 0..5 {
+                        for y in 0..5 {
+                            add_bingo_field(ui, &mut board, &client_props, &client, (x, y));
+                        }
+                        ui.end_row();
                     }
-                    ui.end_row();
-                }
-            });
-    });
+                });
+        });
 }
 
 fn add_bingo_field(
