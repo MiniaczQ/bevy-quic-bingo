@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::teams::Team;
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Lockout,
     FFA,

@@ -1,9 +1,10 @@
-use std::{net::SocketAddr, str::FromStr, thread::sleep, time::Duration};
+use std::{collections::HashSet, net::SocketAddr, str::FromStr, thread::sleep, time::Duration};
 
 use bevy::{app::AppExit, prelude::*};
 use bevy_quinnet::client::{
-    certificate::CertificateVerificationMode, connection::ConnectionConfiguration, Client,
-    QuinnetClientPlugin,
+    certificate::CertificateVerificationMode,
+    connection::{ConnectionConfiguration, ConnectionLostEvent},
+    Client, QuinnetClientPlugin,
 };
 
 use crate::{
@@ -38,7 +39,8 @@ impl Plugin for ConnectionPlugin {
             )
             .add_systems(
                 PostUpdate,
-                (on_app_exit, on_disconnect).run_if(in_state(AppState::Playing)),
+                (on_app_exit, on_disconnect, on_lost_connection)
+                    .run_if(in_state(AppState::Playing)),
             );
     }
 }
@@ -47,29 +49,38 @@ impl Plugin for ConnectionPlugin {
 pub struct DisconnectEvent;
 
 pub fn on_disconnect(
-    mut events: EventReader<DisconnectEvent>,
     mut client: ResMut<Client>,
+    mut events: EventReader<DisconnectEvent>,
     mut state: ResMut<NextState<AppState>>,
 ) {
     for _ in events.read() {
         client
-            .connection()
-            .send_message(ClientMessage::Disconnect {})
-            .unwrap();
-        state.set(AppState::MainMenu);
+            .get_connection()
+            .map(|c| c.try_send_message(ClientMessage::Disconnect {}));
         sleep(Duration::from_secs_f32(0.1));
-        client.close_all_connections().unwrap();
+        client.close_all_connections().ok();
+        state.set(AppState::MainMenu);
+    }
+}
+
+pub fn on_lost_connection(
+    mut client: ResMut<Client>,
+    mut events: EventReader<ConnectionLostEvent>,
+    mut state: ResMut<NextState<AppState>>,
+) {
+    for _ in events.read() {
+        client.close_all_connections().ok();
+        state.set(AppState::MainMenu);
     }
 }
 
 pub fn on_app_exit(app_exit_events: EventReader<AppExit>, mut client: ResMut<Client>) {
     if !app_exit_events.is_empty() {
         client
-            .connection()
-            .send_message(ClientMessage::Disconnect {})
-            .unwrap();
+            .get_connection()
+            .map(|c| c.try_send_message(ClientMessage::Disconnect {}));
         sleep(Duration::from_secs_f32(0.1));
-        client.close_all_connections().unwrap();
+        client.close_all_connections().ok();
     }
 }
 
@@ -92,15 +103,18 @@ fn handle_server_messages(
                     clients.data = new_clients;
                 }
                 ServerMessage::UpdateBoardPrompts(new_board) => {
+                    board.mode = new_board.mode;
                     board.x_size = new_board.x_size;
                     board.y_size = new_board.y_size;
                     board.prompts = new_board.prompts;
+                    board.activity = vec![HashSet::default(); board.prompts.len()]
                 }
                 ServerMessage::UpdateBoardActivity(activity) => board.activity = activity.activity,
             },
             Ok(None) => break,
             Err(_) => {
                 events.send(DisconnectEvent);
+                break;
             }
         }
     }

@@ -18,6 +18,8 @@ use common::{
     BoardRes,
 };
 
+use crate::common::bingo::Mode;
+
 #[derive(Resource, Debug, Clone, Default)]
 struct Clients {
     data: HashMap<ClientId, ClientProps>,
@@ -68,6 +70,13 @@ fn handle_client_messages(
                             "Received a Join from an already connected client: {}",
                             client_id
                         );
+                    } else if clients
+                        .data
+                        .values()
+                        .find(|x| &x.username == &username)
+                        .is_some()
+                    {
+                        warn!("User with this nickname is already connected: {}", username);
                         endpoint.disconnect_client(client_id).unwrap();
                     } else {
                         info!("{} connected", username);
@@ -82,6 +91,25 @@ fn handle_client_messages(
                         );
                         endpoint
                             .send_message(client_id, ServerMessage::InitClient(client_id))
+                            .unwrap();
+                        endpoint
+                            .send_message(
+                                client_id,
+                                ServerMessage::UpdateBoardPrompts(BoardPrompts {
+                                    mode: board.0.mode,
+                                    x_size: board.0.x_size,
+                                    y_size: board.0.y_size,
+                                    prompts: board.0.prompts.clone(),
+                                }),
+                            )
+                            .unwrap();
+                        endpoint
+                            .send_message(
+                                client_id,
+                                ServerMessage::UpdateBoardActivity(BoardActivity {
+                                    activity: board.0.activity.clone(),
+                                }),
+                            )
                             .unwrap();
                         broadcast_clients(endpoint, &clients);
                     }
@@ -107,10 +135,22 @@ fn handle_client_messages(
                         "{} changed activity for team {:?} at {}, {} to {}",
                         client.username, team, x, y, is_active
                     );
+                    let mode = board.0.mode;
                     let activity = board.activity_mut(x, y);
-                    match !is_active {
-                        true => activity.remove(&team),
-                        false => activity.insert(team),
+                    info!(
+                        "{mode:?} {activity:?} {} {}",
+                        mode != Mode::Lockout,
+                        activity.is_empty()
+                    );
+                    match is_active {
+                        true => {
+                            if mode != Mode::Lockout || activity.is_empty() {
+                                activity.insert(team);
+                            }
+                        }
+                        false => {
+                            activity.remove(&team);
+                        }
                     };
 
                     broadcast_board_activity(
@@ -150,6 +190,10 @@ fn handle_client_messages(
                             activity: board.0.activity.clone(),
                         },
                     )
+                }
+                ClientMessage::Kick(client_id) => {
+                    endpoint.try_disconnect_client(client_id);
+                    handle_disconnect(endpoint, &mut clients, client_id);
                 }
             }
         }

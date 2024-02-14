@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 #[path = "../common/mod.rs"]
 mod common;
 mod connecting;

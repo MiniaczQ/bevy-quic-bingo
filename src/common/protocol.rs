@@ -20,6 +20,7 @@ pub enum ClientMessage {
     },
     UpdateBoard(BoardPrompts),
     ResetActivity,
+    Kick(ClientId),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
