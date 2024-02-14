@@ -128,6 +128,7 @@ fn game_menu_ui(
     board: Res<BoardRes>,
     mut mode_conf: ResMut<ConfMode>,
     mut prompts_conf: ResMut<ConfPrompts>,
+    mut prompts_str: Local<String>,
 ) {
     let Ok(mut ctx) = egui_ctx.get_single_mut() else {
         return;
@@ -269,7 +270,7 @@ fn game_menu_ui(
 
             let mut prompts_size_changed = false;
             egui::Grid::new("Bingo Size Grid").show(ui, |ui| {
-                ui.label("Width");
+                ui.label("Board width");
                 prompts_size_changed |= ui
                     .add(
                         egui::DragValue::new(&mut prompts_conf.x_size)
@@ -278,7 +279,7 @@ fn game_menu_ui(
                     )
                     .changed();
                 ui.end_row();
-                ui.label("Height");
+                ui.label("Board height");
                 prompts_size_changed |= ui
                     .add(
                         egui::DragValue::new(&mut prompts_conf.y_size)
@@ -291,7 +292,17 @@ fn game_menu_ui(
 
             let randomize = ui.button("Randomize prompts").clicked();
             if randomize | prompts_size_changed {
-                let mut prompts = vec![String::from("a"), String::from("b"), String::from("c")];
+                let mut prompts = prompts_str
+                    .split('\n')
+                    .filter_map(|x| {
+                        let x = x.trim();
+                        if x.is_empty() {
+                            None
+                        } else {
+                            Some(x.to_owned())
+                        }
+                    })
+                    .collect::<Vec<_>>();
                 let prompt_count = prompts.len();
                 let target_prompt_count =
                     prompts_conf.x_size as usize * prompts_conf.y_size as usize;
@@ -342,6 +353,14 @@ fn game_menu_ui(
                     prompts_conf.changed = false;
                 }
             });
+
+            ui.separator();
+            ui.label("Prompts");
+            ui.separator();
+            egui::ScrollArea::vertical()
+                .auto_shrink(false)
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
+                .show(ui, |ui| ui.text_edit_multiline(&mut *prompts_str));
         }
     });
 }

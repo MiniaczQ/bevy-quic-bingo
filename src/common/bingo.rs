@@ -129,9 +129,9 @@ impl Board {
                     let x_size = self.config.prompts.x_size;
                     let y_size = self.config.prompts.y_size;
                     // L-R
-                    if length < y_size {
+                    if length <= y_size {
                         for sx in 0..x_size {
-                            'xy: for sy in 0..y_size - length + 1 {
+                            'xy: for sy in 0..y_size + 1 - length {
                                 for d in 0..length {
                                     if !self.is_active(sx, sy + d, team) {
                                         continue 'xy;
@@ -142,8 +142,8 @@ impl Board {
                         }
                     }
                     // T-D
-                    if length < x_size {
-                        for sx in 0..x_size - length + 1 {
+                    if length <= x_size {
+                        for sx in 0..x_size + 1 - length {
                             'xy: for sy in 0..y_size {
                                 for d in 0..length {
                                     if !self.is_active(sx + d, sy, team) {
@@ -155,9 +155,9 @@ impl Board {
                         }
                     }
                     // TL-BR
-                    if length < x_size && length < y_size {
-                        for sx in 0..x_size - length + 1 {
-                            'xy: for sy in 0..y_size - length + 1 {
+                    if length <= x_size && length <= y_size {
+                        for sx in 0..x_size + 1 - length {
+                            'xy: for sy in 0..y_size + 1 - length {
                                 for d in 0..length {
                                     if !self.is_active(sx + d, sy + d, team) {
                                         continue 'xy;
@@ -168,9 +168,9 @@ impl Board {
                         }
                     }
                     // BL-TR
-                    if length < x_size && length < y_size {
-                        for sx in 0..x_size - length + 1 {
-                            'xy: for sy in 0..y_size - length + 1 {
+                    if length <= x_size && length <= y_size {
+                        for sx in 0..x_size + 1 - length {
+                            'xy: for sy in 0..y_size + 1 - length {
                                 for d in 0..length {
                                     if !self.is_active(sx + d, y_size - sy - d - 1, team) {
                                         continue 'xy;
