@@ -14,6 +14,7 @@ use crate::{
         teams::Team,
         BoardRes, ConfMode, ConfPrompts,
     },
+    fit_text::PromptLayoutCache,
     states::AppState,
     Clients,
 };
@@ -106,6 +107,7 @@ fn handle_messages(
     mut mode_conf: ResMut<ConfMode>,
     mut prompts_conf: ResMut<ConfPrompts>,
     mut events: EventWriter<StopConnection>,
+    mut cache: ResMut<PromptLayoutCache>,
 ) {
     loop {
         let result = client.connection_mut().receive_message::<ServerMessage>();
@@ -116,6 +118,7 @@ fn handle_messages(
                 &mut clients,
                 &mut mode_conf,
                 &mut prompts_conf,
+                &mut cache,
                 msg,
             ),
             Ok(None) => break,
@@ -133,6 +136,7 @@ fn handle_single_message(
     clients: &mut Clients,
     mode_conf: &mut ConfMode,
     prompts_conf: &mut ConfPrompts,
+    cache: &mut PromptLayoutCache,
     msg: ServerMessage,
 ) {
     match msg {
@@ -153,6 +157,7 @@ fn handle_single_message(
             prompts_conf.prompts = prompts;
             prompts_conf.changed = false;
             board.reset_activity();
+            cache.clear();
         }
         ServerMessage::SetActivity(activity) => {
             board.activity = activity;

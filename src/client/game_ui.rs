@@ -16,6 +16,7 @@ use crate::{
         BoardRes, ConfMode, ConfPrompts,
     },
     connecting::{StopConnection, TeamWon},
+    fit_text::PromptLayoutCache,
     scoped::Scoped,
     states::AppState,
     ui::root_element,
@@ -47,6 +48,7 @@ fn add_resources(mut commands: Commands) {
     commands.insert_resource(Clients::default());
     commands.insert_resource(ConfMode::default());
     commands.insert_resource(ConfPrompts::default());
+    commands.insert_resource(PromptLayoutCache::default());
 }
 
 fn remove_resources(mut commands: Commands) {
@@ -54,6 +56,7 @@ fn remove_resources(mut commands: Commands) {
     commands.remove_resource::<Clients>();
     commands.remove_resource::<ConfMode>();
     commands.remove_resource::<ConfPrompts>();
+    commands.remove_resource::<PromptLayoutCache>();
 }
 
 fn team_to_ui(ui: &mut egui::Ui, value: &mut Option<Team>, team: Option<Team>) -> egui::Response {
@@ -129,6 +132,7 @@ fn game_menu_ui(
     mut mode_conf: ResMut<ConfMode>,
     mut prompts_conf: ResMut<ConfPrompts>,
     mut prompts_str: Local<String>,
+    mut cache: ResMut<PromptLayoutCache>,
 ) {
     let Ok(mut ctx) = egui_ctx.get_single_mut() else {
         return;
@@ -310,6 +314,7 @@ fn game_menu_ui(
                 prompts.shuffle(&mut rand::thread_rng());
                 prompts.truncate(target_prompt_count);
                 prompts_conf.prompts.prompts = prompts;
+                cache.clear();
             }
             prompts_conf.changed |= prompts_size_changed || randomize;
 
@@ -424,8 +429,8 @@ fn create_bingo_window(
     }
 }
 
-pub const FIELD_SIZE: f32 = 50.0;
-pub const GAP_SIZE: f32 = 1.0;
+pub const FIELD_SIZE: f32 = 120.0;
+pub const GAP_SIZE: f32 = 3.0;
 
 fn bingo_board_ui(
     mut egui_ctx: Query<&mut EguiContext, Without<PrimaryWindow>>,
@@ -433,6 +438,7 @@ fn bingo_board_ui(
     prompts_conf: Res<ConfPrompts>,
     clients: Res<Clients>,
     client: Res<Client>,
+    mut prompt_layout_cache: ResMut<PromptLayoutCache>,
 ) {
     let Ok(mut ctx) = egui_ctx.get_single_mut() else {
         return;
@@ -456,7 +462,12 @@ fn bingo_board_ui(
                     if prompts_conf.changed {
                         for y in 0..prompts_conf.y_size {
                             for x in 0..prompts_conf.x_size {
-                                preview_bingo_field(ui, &prompts_conf, (x, y));
+                                preview_bingo_field(
+                                    ui,
+                                    &prompts_conf,
+                                    (x, y),
+                                    &mut prompt_layout_cache,
+                                );
                             }
                             ui.end_row();
                         }
@@ -469,6 +480,7 @@ fn bingo_board_ui(
                                     &client_props,
                                     &client,
                                     (x, y),
+                                    &mut prompt_layout_cache,
                                 );
                             }
                             ui.end_row();
@@ -484,11 +496,12 @@ fn playable_bingo_field(
     client_props: &ClientProps,
     client: &Client,
     (x, y): (u8, u8),
+    prompt_layout_cache: &mut PromptLayoutCache,
 ) {
     let team = client_props.team;
     let mode = board.config.mode.game_mode;
     let activity = board.activity(x, y);
-    let mut widget = egui::Button::new(board.prompt(x, y)).rounding(0.0);
+    let mut widget = egui::Button::new("").rounding(0.0);
     match mode {
         GameMode::Lockout => {
             if let Some(team) = activity.iter().next() {
@@ -508,10 +521,20 @@ fn playable_bingo_field(
     let button = ui.add_sized(size, widget);
     let clicked = button.clicked();
 
-    let painter = ui.painter_at(button.rect);
     let pos = button.rect.left_top();
     let size = button.rect.size();
     let (x_step, y_step) = (size.x / 4.0, size.y / 4.0);
+    let painter = ui.painter_at(button.rect);
+
+    prompt_layout_cache.draw_fitted_text(
+        &painter,
+        board.prompt(x, y),
+        egui::Rect::from_min_size(
+            pos + egui::vec2(0.0, y_step),
+            egui::vec2(size.x, size.y / 2.0),
+        ),
+    );
+
     for (i, team) in Team::iter().enumerate() {
         if activity.contains(&team) {
             let x_offset = (i % 4) as f32 * x_step;
@@ -555,10 +578,28 @@ fn playable_bingo_field(
     }
 }
 
-fn preview_bingo_field(ui: &mut egui::Ui, prompts: &BoardPrompts, (x, y): (u8, u8)) {
-    let widget = egui::Button::new(prompts.prompt(x, y)).rounding(0.0);
+fn preview_bingo_field(
+    ui: &mut egui::Ui,
+    prompts: &BoardPrompts,
+    (x, y): (u8, u8),
+    prompt_layout_cache: &mut PromptLayoutCache,
+) {
+    let widget = egui::Button::new("").rounding(0.0);
     let size = egui::Vec2::new(FIELD_SIZE, FIELD_SIZE);
-    ui.add_sized(size, widget);
+    let button = ui.add_sized(size, widget);
+    let pos = button.rect.left_top();
+    let size = button.rect.size();
+    let y_step = size.y / 4.0;
+    let painter = ui.painter_at(button.rect);
+
+    prompt_layout_cache.draw_fitted_text(
+        &painter,
+        prompts.prompt(x, y),
+        egui::Rect::from_min_size(
+            pos + egui::vec2(0.0, y_step),
+            egui::vec2(size.x, size.y / 2.0),
+        ),
+    );
 }
 
 #[derive(Component)]

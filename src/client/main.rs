@@ -3,6 +3,7 @@
 #[path = "../common/mod.rs"]
 mod common;
 mod connecting;
+mod fit_text;
 mod game_ui;
 mod menu_ui;
 mod scoped;
