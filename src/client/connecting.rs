@@ -1,4 +1,4 @@
-use std::{collections::HashSet, net::SocketAddr, str::FromStr, thread::sleep, time::Duration};
+use std::{net::SocketAddr, str::FromStr, thread::sleep, time::Duration};
 
 use bevy::{app::AppExit, prelude::*};
 use bevy_quinnet::client::{
@@ -37,10 +37,7 @@ impl Plugin for ConnectionPlugin {
                 Update,
                 start_connection.run_if(in_state(AppState::MainMenu)),
             )
-            .add_systems(
-                Update,
-                handle_server_messages.run_if(in_state(AppState::Playing)),
-            )
+            .add_systems(Update, handle_messages.run_if(in_state(AppState::Playing)))
             .add_systems(
                 PostUpdate,
                 stop_connection.run_if(in_state(AppState::Playing)),
@@ -96,7 +93,7 @@ pub fn stop_connection(
     state.set(AppState::MainMenu);
 }
 
-fn handle_server_messages(
+fn handle_messages(
     mut clients: ResMut<Clients>,
     mut client: ResMut<Client>,
     mut board: ResMut<BoardRes>,
@@ -119,19 +116,18 @@ fn handle_single_message(board: &mut Board, clients: &mut Clients, msg: ServerMe
     match msg {
         ServerMessage::InitClient(self_id) => {
             clients.self_id = self_id;
-            info!("Connected with id {}", self_id);
         }
-        ServerMessage::UpdateClientList(new_clients) => {
+        ServerMessage::SetClients(new_clients) => {
             clients.data = new_clients;
         }
-        ServerMessage::UpdateBoardPrompts(new_board) => {
-            board.mode = new_board.mode;
-            board.win_condition = new_board.win_condition;
-            board.x_size = new_board.x_size;
-            board.y_size = new_board.y_size;
-            board.prompts = new_board.prompts;
-            board.activity = vec![HashSet::default(); board.prompts.len()]
+        ServerMessage::SetMode(mode) => {
+            board.config.mode = mode;
+            board.reset_activity();
         }
-        ServerMessage::UpdateBoardActivity(activity) => board.activity = activity.activity,
+        ServerMessage::SetPrompts(prompts) => {
+            board.config.prompts = prompts;
+            board.reset_activity();
+        }
+        ServerMessage::SetActivity(activity) => board.activity = activity,
     }
 }

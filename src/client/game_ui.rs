@@ -8,8 +8,8 @@ use bevy_quinnet::client::Client;
 
 use crate::{
     common::{
-        bingo::{Board, Mode, WinCondition},
-        protocol::{BoardPrompts, ClientMessage, ClientProps},
+        bingo::{Board, BoardConfig, GameMode, WinCondition},
+        protocol::{ClientMessage, ClientProps},
         teams::Team,
         BoardRes,
     },
@@ -23,18 +23,16 @@ pub struct GameUiPlugin;
 
 impl Plugin for GameUiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            OnEnter(AppState::Playing),
-            (add_resources, create_bingo_window),
-        )
-        .add_systems(
-            OnExit(AppState::Playing),
-            (remove_resources, remove_bingo_window),
-        )
-        .add_systems(
-            Update,
-            (game_menu_ui, bingo_board_ui).run_if(in_state(AppState::Playing)),
-        );
+        app.add_systems(OnEnter(AppState::Playing), add_resources)
+            .add_systems(
+                OnExit(AppState::Playing),
+                (remove_resources, remove_bingo_window),
+            )
+            .add_systems(
+                Update,
+                (create_bingo_window, game_menu_ui, bingo_board_ui)
+                    .run_if(in_state(AppState::Playing)),
+            );
     }
 }
 
@@ -88,25 +86,27 @@ const HOST_ICON: &str = "★";
 const KICK_ICON: &str = "🗑";
 
 #[derive(Debug, PartialEq, Eq)]
-enum WinConditionFlat {
+enum FlatWinCondition {
     InRow,
     Domination,
     FirstTo,
 }
 
-fn flatten_win_contition(value: WinCondition) -> WinConditionFlat {
-    match value {
-        WinCondition::InRow { length: _, rows: _ } => WinConditionFlat::InRow,
-        WinCondition::Domination => WinConditionFlat::Domination,
-        WinCondition::FirstTo(_) => WinConditionFlat::FirstTo,
+impl FlatWinCondition {
+    pub fn flatten(value: WinCondition) -> Self {
+        match value {
+            WinCondition::InRow { length: _, rows: _ } => FlatWinCondition::InRow,
+            WinCondition::Domination => FlatWinCondition::Domination,
+            WinCondition::FirstTo(_) => FlatWinCondition::FirstTo,
+        }
     }
-}
 
-fn unflatten_win_contition(value: WinConditionFlat) -> WinCondition {
-    match value {
-        WinConditionFlat::InRow => WinCondition::InRow { length: 5, rows: 1 },
-        WinConditionFlat::Domination => WinCondition::Domination,
-        WinConditionFlat::FirstTo => WinCondition::FirstTo(13),
+    pub fn unflatten(self) -> WinCondition {
+        match self {
+            FlatWinCondition::InRow => WinCondition::InRow { length: 5, rows: 1 },
+            FlatWinCondition::Domination => WinCondition::Domination,
+            FlatWinCondition::FirstTo => WinCondition::FirstTo(13),
+        }
     }
 }
 
@@ -116,16 +116,16 @@ fn game_menu_ui(
     mut clients: ResMut<Clients>,
     client: Res<Client>,
     board: Res<BoardRes>,
-    mut board_settings: Local<Option<BoardPrompts>>,
+    mut board_config: Local<Option<BoardConfig>>,
 ) {
     let Ok(mut ctx) = egui_ctx.get_single_mut() else {
         return;
     };
 
-    if board_settings.is_none() {
-        *board_settings = Some(BoardPrompts::from_board(&board));
+    if board_config.is_none() {
+        *board_config = Some(board.config.clone());
     }
-    let board_settings = board_settings.as_mut().unwrap();
+    let board_conf = board_config.as_mut().unwrap();
 
     root_element(ctx.get_mut(), |ui| {
         let self_id = clients.self_id;
@@ -178,8 +178,11 @@ fn game_menu_ui(
         ui.separator();
         ui.label("Game Settings");
         ui.separator();
-        ui.label(format!("Mode: {:?}", board.mode));
-        ui.label(format!("Win condition: {}", board.win_condition));
+        ui.label(format!("Game mode: {}", board.config.mode.game_mode));
+        ui.label(format!(
+            "Win condition: {}",
+            board.config.mode.win_condition
+        ));
 
         if self_props.is_host {
             let mut mode_changed = false;
@@ -188,35 +191,35 @@ fn game_menu_ui(
             // Mode
             ui.horizontal(|ui| {
                 mode_changed |= ui
-                    .selectable_value(&mut board_settings.mode, Mode::FFA, "FFA")
+                    .selectable_value(&mut board_conf.mode.game_mode, GameMode::FFA, "FFA")
                     .clicked();
                 mode_changed |= ui
-                    .selectable_value(&mut board_settings.mode, Mode::Lockout, "Lockout")
+                    .selectable_value(&mut board_conf.mode.game_mode, GameMode::Lockout, "Lockout")
                     .clicked();
             });
             if mode_changed
-                && board_settings.mode != Mode::Lockout
-                && board_settings.win_condition == WinCondition::Domination
+                && board_conf.mode.game_mode != GameMode::Lockout
+                && board_conf.mode.win_condition == WinCondition::Domination
             {
-                board_settings.win_condition = unflatten_win_contition(WinConditionFlat::InRow);
+                board_conf.mode.win_condition = FlatWinCondition::InRow.unflatten();
                 win_condition_changed = true;
             }
 
             // Win condition
-            let mut flat_win_condition = flatten_win_contition(board_settings.win_condition);
+            let mut flat_win_condition = FlatWinCondition::flatten(board_conf.mode.win_condition);
             ui.horizontal(|ui| {
                 win_condition_changed |= ui
                     .selectable_value(
                         &mut flat_win_condition,
-                        WinConditionFlat::InRow,
+                        FlatWinCondition::InRow,
                         "N rows of M",
                     )
                     .clicked();
-                if board_settings.mode == Mode::Lockout {
+                if board_conf.mode.game_mode == GameMode::Lockout {
                     win_condition_changed |= ui
                         .selectable_value(
                             &mut flat_win_condition,
-                            WinConditionFlat::Domination,
+                            FlatWinCondition::Domination,
                             "Domination",
                         )
                         .clicked();
@@ -224,16 +227,16 @@ fn game_menu_ui(
                 win_condition_changed |= ui
                     .selectable_value(
                         &mut flat_win_condition,
-                        WinConditionFlat::FirstTo,
+                        FlatWinCondition::FirstTo,
                         "First to N",
                     )
                     .clicked();
             });
             if win_condition_changed {
-                board_settings.win_condition = unflatten_win_contition(flat_win_condition);
+                board_conf.mode.win_condition = flat_win_condition.unflatten();
             }
             egui::Grid::new("Win Condition Grid").show(ui, |ui| {
-                match &mut board_settings.win_condition {
+                match &mut board_conf.mode.win_condition {
                     WinCondition::InRow {
                         ref mut length,
                         ref mut rows,
@@ -255,22 +258,35 @@ fn game_menu_ui(
                 }
             });
 
+            // Send update
             ui.horizontal(|ui| {
-                let different = !board_settings.same_as_board(&board);
+                let different_mode = board_conf.mode != board.config.mode;
+                let different_prompts = board_conf.prompts != board.config.prompts;
+                let different = different_mode || different_prompts;
+
                 let restart = ui
                     .add_enabled(different, egui::Button::new("Restart game"))
                     .clicked();
                 if restart {
-                    client
-                        .connection()
-                        .try_send_message(ClientMessage::UpdateBoard(board_settings.clone()));
+                    if different_mode {
+                        client
+                            .connection()
+                            .try_send_message(ClientMessage::SetMode(board_conf.mode.clone()));
+                    }
+                    if different_prompts {
+                        client
+                            .connection()
+                            .try_send_message(ClientMessage::SetPrompts(
+                                board_conf.prompts.clone(),
+                            ));
+                    }
                 }
 
                 let cancel = ui
                     .add_enabled(different, egui::Button::new("Cancel changes"))
                     .clicked();
                 if cancel {
-                    *board_settings = BoardPrompts::from_board(&board);
+                    *board_conf = board.config.clone();
                 }
             });
         }
@@ -280,8 +296,19 @@ fn game_menu_ui(
 #[derive(Component)]
 struct BingoWindow;
 
-fn create_bingo_window(mut commands: Commands) {
-    let second_window_id = commands
+#[derive(Component)]
+struct BingoWindowCamera;
+
+fn create_bingo_window(
+    mut commands: Commands,
+    window: Query<Entity, With<BingoWindow>>,
+    mut camera: Query<&mut Camera, With<BingoWindowCamera>>,
+) {
+    if window.get_single().is_ok() {
+        return;
+    }
+
+    let window_id = commands
         .spawn((
             BingoWindow,
             Window {
@@ -294,18 +321,30 @@ fn create_bingo_window(mut commands: Commands) {
         ))
         .id();
 
-    commands.spawn(Camera2dBundle {
-        camera: Camera {
-            target: RenderTarget::Window(WindowRef::Entity(second_window_id)),
+    let target = RenderTarget::Window(WindowRef::Entity(window_id));
+    if let Ok(mut camera) = camera.get_single_mut() {
+        camera.target = target;
+    } else {
+        commands.spawn(Camera2dBundle {
+            camera: Camera {
+                target,
+                ..default()
+            },
             ..default()
-        },
-        ..default()
-    });
+        });
+    }
 }
 
-fn remove_bingo_window(mut commands: Commands, query: Query<Entity, With<BingoWindow>>) {
-    let entity = query.single();
-    commands.entity(entity).despawn_recursive();
+fn remove_bingo_window(
+    mut commands: Commands,
+    window: Query<Entity, With<BingoWindow>>,
+    camera: Query<Entity, With<BingoWindowCamera>>,
+) {
+    if let Ok(window_id) = window.get_single() {
+        commands.entity(window_id).despawn_recursive();
+    }
+    let camera_id = camera.single();
+    commands.entity(camera_id).despawn_recursive();
 }
 
 fn bingo_board_ui(
@@ -344,19 +383,19 @@ fn add_bingo_field(
     (x, y): (u8, u8),
 ) {
     let team = client_props.team;
-    let mode = board.mode;
+    let mode = board.config.mode.game_mode;
     let activity = board.activity(x, y);
 
     let size = 50.0;
     let size2d = egui::Vec2::new(size, size);
     let mut widget = egui::Button::new(board.prompt(x, y)).rounding(0.0);
     match mode {
-        Mode::Lockout => {
+        GameMode::Lockout => {
             if let Some(team) = activity.iter().next() {
                 widget = widget.fill(team.color());
             }
         }
-        Mode::FFA => {
+        GameMode::FFA => {
             if let Some(team) = team {
                 if activity.contains(&team) {
                     widget = widget.fill(team.color());
@@ -384,7 +423,7 @@ fn add_bingo_field(
 
     if client_props.team.is_some() && clicked {
         let team = client_props.team.unwrap();
-        let mode = board.mode;
+        let mode = board.config.mode.game_mode;
         let win = board.check_win();
         let activity = board.activity_mut(x, y);
         let was_active = activity.contains(&team);
@@ -395,7 +434,7 @@ fn add_bingo_field(
                 change = true;
             }
             false => {
-                if (mode != Mode::Lockout || activity.is_empty()) && win.is_none() {
+                if (mode != GameMode::Lockout || activity.is_empty()) && win.is_none() {
                     activity.insert(team);
                     change = true;
                 }

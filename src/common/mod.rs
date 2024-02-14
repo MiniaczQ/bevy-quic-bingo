@@ -1,31 +1,15 @@
-use std::{
-    collections::HashSet,
-    ops::{Deref, DerefMut},
-};
+use std::ops::{Deref, DerefMut};
 
 use bevy::prelude::*;
 
-use self::bingo::{Board, Mode, WinCondition};
+use self::bingo::Board;
 
 pub mod bingo;
 pub mod protocol;
 pub mod teams;
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct BoardRes(pub Board);
-
-impl Default for BoardRes {
-    fn default() -> Self {
-        Self(Board {
-            mode: Mode::FFA,
-            win_condition: WinCondition::InRow { length: 5, rows: 1 },
-            x_size: 5,
-            y_size: 5,
-            prompts: vec![String::from("boop"); 25],
-            activity: vec![HashSet::new(); 25],
-        })
-    }
-}
 
 impl Deref for BoardRes {
     type Target = Board;
