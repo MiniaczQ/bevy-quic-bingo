@@ -18,8 +18,7 @@ use bevy_quinnet::shared::ClientId;
 use connecting::ConnectionPlugin;
 use game_ui::GameUiPlugin;
 use menu_ui::MenuUiPlugin;
-use scoped::ScopedExt;
-use states::AppState;
+use states::StatesPlugin;
 use std::collections::HashMap;
 
 use common::protocol::ClientProps;
@@ -42,15 +41,14 @@ fn main() {
             exit_condition: ExitCondition::OnPrimaryClosed,
             ..default()
         }))
-        .add_plugins(MenuUiPlugin)
+        .add_plugins(StatesPlugin)
         .add_plugins(ConnectionPlugin)
+        .add_plugins(MenuUiPlugin)
         .add_plugins(GameUiPlugin)
-        .add_state::<AppState>()
-        .entity_scope::<AppState>()
         .add_systems(Startup, setup_camera)
         .run();
 }
 
 fn setup_camera(mut commands: Commands) {
-    commands.spawn((Name::new("camera"), Camera2dBundle::default()));
+    commands.spawn(Camera2dBundle::default());
 }
