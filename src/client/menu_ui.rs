@@ -4,7 +4,10 @@ use bevy::{app::AppExit, prelude::*, window::PrimaryWindow};
 use bevy_egui::{EguiContext, EguiPlugin};
 
 use crate::{
-    connecting::ConnectEvent, states::AppState, ui::root_element, userdata::{Userdata, UserdataPlugin}
+    connecting::StartConnection,
+    states::AppState,
+    ui::root_element,
+    userdata::{Userdata, UserdataPlugin},
 };
 
 pub struct MenuUiPlugin;
@@ -45,7 +48,7 @@ fn main_menu_ui(
     mut egui_ctx: Query<&mut EguiContext, With<PrimaryWindow>>,
     mut app_exit: EventWriter<AppExit>,
     mut userdata: ResMut<Userdata>,
-    mut client_connect: EventWriter<ConnectEvent>,
+    mut client_connect: EventWriter<StartConnection>,
 ) {
     let Ok(mut ctx) = egui_ctx.get_single_mut() else {
         return;
@@ -81,7 +84,7 @@ fn main_menu_ui(
                     addr.unwrap(),
                     userdata.username
                 );
-                client_connect.send(ConnectEvent {
+                client_connect.send(StartConnection {
                     username: userdata.username.clone(),
                     addr: addr.unwrap(),
                 });

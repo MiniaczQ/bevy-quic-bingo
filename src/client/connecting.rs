@@ -9,6 +9,7 @@ use bevy_quinnet::client::{
 
 use crate::{
     common::{
+        bingo::Board,
         protocol::{ClientMessage, ServerMessage},
         BoardRes,
     },
@@ -17,17 +18,20 @@ use crate::{
 };
 
 #[derive(Event)]
-pub struct ConnectEvent {
+pub struct StartConnection {
     pub username: String,
     pub addr: SocketAddr,
 }
+
+#[derive(Event)]
+pub struct StopConnection;
 
 pub struct ConnectionPlugin;
 
 impl Plugin for ConnectionPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<ConnectEvent>()
-            .add_event::<DisconnectEvent>()
+        app.add_event::<StartConnection>()
+            .add_event::<StopConnection>()
             .add_plugins(QuinnetClientPlugin::default())
             .add_systems(
                 Update,
@@ -39,92 +43,15 @@ impl Plugin for ConnectionPlugin {
             )
             .add_systems(
                 PostUpdate,
-                (on_app_exit, on_disconnect, on_lost_connection)
-                    .run_if(in_state(AppState::Playing)),
+                stop_connection.run_if(in_state(AppState::Playing)),
             );
-    }
-}
-
-#[derive(Event)]
-pub struct DisconnectEvent;
-
-pub fn on_disconnect(
-    mut client: ResMut<Client>,
-    mut events: EventReader<DisconnectEvent>,
-    mut state: ResMut<NextState<AppState>>,
-) {
-    for _ in events.read() {
-        client
-            .get_connection()
-            .map(|c| c.try_send_message(ClientMessage::Disconnect {}));
-        sleep(Duration::from_secs_f32(0.1));
-        client.close_all_connections().ok();
-        state.set(AppState::MainMenu);
-    }
-}
-
-pub fn on_lost_connection(
-    mut client: ResMut<Client>,
-    mut events: EventReader<ConnectionLostEvent>,
-    mut state: ResMut<NextState<AppState>>,
-) {
-    for _ in events.read() {
-        client.close_all_connections().ok();
-        state.set(AppState::MainMenu);
-    }
-}
-
-pub fn on_app_exit(app_exit_events: EventReader<AppExit>, mut client: ResMut<Client>) {
-    if !app_exit_events.is_empty() {
-        client
-            .get_connection()
-            .map(|c| c.try_send_message(ClientMessage::Disconnect {}));
-        sleep(Duration::from_secs_f32(0.1));
-        client.close_all_connections().ok();
-    }
-}
-
-fn handle_server_messages(
-    mut clients: ResMut<Clients>,
-    mut client: ResMut<Client>,
-    mut board: ResMut<BoardRes>,
-    mut events: EventWriter<DisconnectEvent>,
-) {
-    loop {
-        let result = client.connection_mut().receive_message::<ServerMessage>();
-
-        match result {
-            Ok(Some(msg)) => match msg {
-                ServerMessage::InitClient(self_id) => {
-                    clients.self_id = self_id;
-                    info!("Connected with id {}", self_id);
-                }
-                ServerMessage::UpdateClientList(new_clients) => {
-                    clients.data = new_clients;
-                }
-                ServerMessage::UpdateBoardPrompts(new_board) => {
-                    board.mode = new_board.mode;
-                    board.win_condition = new_board.win_condition;
-                    board.x_size = new_board.x_size;
-                    board.y_size = new_board.y_size;
-                    board.prompts = new_board.prompts;
-                    board.activity = vec![HashSet::default(); board.prompts.len()]
-                }
-                ServerMessage::UpdateBoardActivity(activity) => board.activity = activity.activity,
-            },
-            Ok(None) => break,
-            Err(_) => {
-                events.send(DisconnectEvent);
-                break;
-            }
-        }
     }
 }
 
 fn start_connection(
     mut client: ResMut<Client>,
     mut state: ResMut<NextState<AppState>>,
-    mut events: EventReader<ConnectEvent>,
+    mut events: EventReader<StartConnection>,
 ) {
     for event in events.read() {
         state.set(AppState::Playing);
@@ -143,5 +70,68 @@ fn start_connection(
                 name: event.username.clone(),
             })
             .unwrap()
+    }
+}
+
+pub fn stop_connection(
+    mut client: ResMut<Client>,
+    mut stop_connection: EventReader<StopConnection>,
+    mut connection_lost: EventReader<ConnectionLostEvent>,
+    mut app_exit: EventReader<AppExit>,
+    mut state: ResMut<NextState<AppState>>,
+) {
+    if app_exit.is_empty() && connection_lost.is_empty() && stop_connection.is_empty() {
+        return;
+    }
+
+    app_exit.clear();
+    connection_lost.clear();
+    stop_connection.clear();
+
+    client
+        .get_connection()
+        .map(|c| c.try_send_message(ClientMessage::Disconnect {}));
+    sleep(Duration::from_secs_f32(0.1));
+    client.close_all_connections().ok();
+    state.set(AppState::MainMenu);
+}
+
+fn handle_server_messages(
+    mut clients: ResMut<Clients>,
+    mut client: ResMut<Client>,
+    mut board: ResMut<BoardRes>,
+    mut events: EventWriter<StopConnection>,
+) {
+    loop {
+        let result = client.connection_mut().receive_message::<ServerMessage>();
+        match result {
+            Ok(Some(msg)) => handle_single_message(&mut board, &mut clients, msg),
+            Ok(None) => break,
+            Err(_) => {
+                events.send(StopConnection);
+                break;
+            }
+        }
+    }
+}
+
+fn handle_single_message(board: &mut Board, clients: &mut Clients, msg: ServerMessage) {
+    match msg {
+        ServerMessage::InitClient(self_id) => {
+            clients.self_id = self_id;
+            info!("Connected with id {}", self_id);
+        }
+        ServerMessage::UpdateClientList(new_clients) => {
+            clients.data = new_clients;
+        }
+        ServerMessage::UpdateBoardPrompts(new_board) => {
+            board.mode = new_board.mode;
+            board.win_condition = new_board.win_condition;
+            board.x_size = new_board.x_size;
+            board.y_size = new_board.y_size;
+            board.prompts = new_board.prompts;
+            board.activity = vec![HashSet::default(); board.prompts.len()]
+        }
+        ServerMessage::UpdateBoardActivity(activity) => board.activity = activity.activity,
     }
 }

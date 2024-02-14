@@ -13,7 +13,7 @@ use crate::{
         teams::Team,
         BoardRes,
     },
-    connecting::DisconnectEvent,
+    connecting::StopConnection,
     states::AppState,
     ui::root_element,
     Clients,
@@ -112,7 +112,7 @@ fn unflatten_win_contition(value: WinConditionFlat) -> WinCondition {
 
 fn game_menu_ui(
     mut egui_ctx: Query<&mut EguiContext, With<PrimaryWindow>>,
-    mut disconnect_events: EventWriter<DisconnectEvent>,
+    mut disconnect_events: EventWriter<StopConnection>,
     mut clients: ResMut<Clients>,
     client: Res<Client>,
     board: Res<BoardRes>,
@@ -165,7 +165,7 @@ fn game_menu_ui(
 
         let disconnect = ui.button("Disconnect").clicked();
         if disconnect {
-            disconnect_events.send(DisconnectEvent);
+            disconnect_events.send(StopConnection);
         }
 
         let self_props = clients.data.get_mut(&self_id).unwrap();
