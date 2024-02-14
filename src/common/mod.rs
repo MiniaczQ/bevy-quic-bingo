@@ -2,33 +2,36 @@ use std::ops::{Deref, DerefMut};
 
 use bevy::prelude::*;
 
-use self::bingo::{Board, BoardMode};
+use self::bingo::{Board, BoardMode, BoardPrompts};
 
 pub mod bingo;
 pub mod protocol;
 pub mod teams;
 
 #[derive(Resource, Default)]
-pub struct BoardRes(pub Board);
+pub struct BoardRes {
+    pub board: Board,
+    pub changed: bool,
+}
 
 impl Deref for BoardRes {
     type Target = Board;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.board
     }
 }
 
 impl DerefMut for BoardRes {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        &mut self.board
     }
 }
 
 #[derive(Resource, Default)]
-pub struct BoardModeRes(BoardMode);
+pub struct ConfMode(BoardMode);
 
-impl Deref for BoardModeRes {
+impl Deref for ConfMode {
     type Target = BoardMode;
 
     fn deref(&self) -> &Self::Target {
@@ -36,8 +39,28 @@ impl Deref for BoardModeRes {
     }
 }
 
-impl DerefMut for BoardModeRes {
+impl DerefMut for ConfMode {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+#[derive(Resource, Default)]
+pub struct ConfPrompts {
+    pub prompts: BoardPrompts,
+    pub changed: bool,
+}
+
+impl Deref for ConfPrompts {
+    type Target = BoardPrompts;
+
+    fn deref(&self) -> &Self::Target {
+        &self.prompts
+    }
+}
+
+impl DerefMut for ConfPrompts {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.prompts
     }
 }

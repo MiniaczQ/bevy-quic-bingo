@@ -48,6 +48,17 @@ impl Default for BoardPrompts {
     }
 }
 
+impl BoardPrompts {
+    pub fn offset(&self, x: u8, y: u8) -> usize {
+        x as usize * self.y_size as usize + y as usize
+    }
+
+    pub fn prompt(&self, x: u8, y: u8) -> &String {
+        let offset = self.offset(x, y);
+        &self.prompts[offset]
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BoardActivity {
     pub activity: Vec<HashSet<Team>>,
@@ -87,18 +98,12 @@ impl Board {
         self.activity = BoardActivity::empty(self.config.prompts.prompts.len());
     }
 
-    fn offset(&self, x: u8, y: u8) -> usize {
-        x as usize * self.config.prompts.y_size as usize + y as usize
+    pub fn offset(&self, x: u8, y: u8) -> usize {
+        self.config.prompts.offset(x, y)
     }
 
     pub fn prompt(&self, x: u8, y: u8) -> &String {
-        let offset = self.offset(x, y);
-        &self.config.prompts.prompts[offset]
-    }
-
-    pub fn prompt_mut(&mut self, x: u8, y: u8) -> &mut String {
-        let offset = self.offset(x, y);
-        &mut self.config.prompts.prompts[offset]
+        self.config.prompts.prompt(x, y)
     }
 
     pub fn activity(&self, x: u8, y: u8) -> &HashSet<Team> {
@@ -121,52 +126,58 @@ impl Board {
             WinCondition::InRow { length, rows } => {
                 for team in Team::iter() {
                     let mut winning_rows = 0;
+                    let x_size = self.config.prompts.x_size;
+                    let y_size = self.config.prompts.y_size;
                     // L-R
-                    for sx in 0..self.config.prompts.x_size {
-                        'xy: for sy in 0..self.config.prompts.y_size - length + 1 {
-                            for d in 0..length {
-                                if !self.is_active(sx, sy + d, team) {
-                                    continue 'xy;
+                    if length < y_size {
+                        for sx in 0..x_size {
+                            'xy: for sy in 0..y_size - length + 1 {
+                                for d in 0..length {
+                                    if !self.is_active(sx, sy + d, team) {
+                                        continue 'xy;
+                                    }
                                 }
+                                winning_rows += 1;
                             }
-                            winning_rows += 1;
                         }
                     }
                     // T-D
-                    for sx in 0..self.config.prompts.x_size - length + 1 {
-                        'xy: for sy in 0..self.config.prompts.y_size {
-                            for d in 0..length {
-                                if !self.is_active(sx + d, sy, team) {
-                                    continue 'xy;
+                    if length < x_size {
+                        for sx in 0..x_size - length + 1 {
+                            'xy: for sy in 0..y_size {
+                                for d in 0..length {
+                                    if !self.is_active(sx + d, sy, team) {
+                                        continue 'xy;
+                                    }
                                 }
+                                winning_rows += 1;
                             }
-                            winning_rows += 1;
                         }
                     }
                     // TL-BR
-                    for sx in 0..self.config.prompts.x_size - length + 1 {
-                        'xy: for sy in 0..self.config.prompts.y_size - length + 1 {
-                            for d in 0..length {
-                                if !self.is_active(sx + d, sy + d, team) {
-                                    continue 'xy;
+                    if length < x_size && length < y_size {
+                        for sx in 0..x_size - length + 1 {
+                            'xy: for sy in 0..y_size - length + 1 {
+                                for d in 0..length {
+                                    if !self.is_active(sx + d, sy + d, team) {
+                                        continue 'xy;
+                                    }
                                 }
+                                winning_rows += 1;
                             }
-                            winning_rows += 1;
                         }
                     }
                     // BL-TR
-                    for sx in 0..self.config.prompts.x_size - length + 1 {
-                        'xy: for sy in 0..self.config.prompts.y_size - length + 1 {
-                            for d in 0..length {
-                                if !self.is_active(
-                                    sx + d,
-                                    self.config.prompts.y_size - sy - d - 1,
-                                    team,
-                                ) {
-                                    continue 'xy;
+                    if length < x_size && length < y_size {
+                        for sx in 0..x_size - length + 1 {
+                            'xy: for sy in 0..y_size - length + 1 {
+                                for d in 0..length {
+                                    if !self.is_active(sx + d, y_size - sy - d - 1, team) {
+                                        continue 'xy;
+                                    }
                                 }
+                                winning_rows += 1;
                             }
-                            winning_rows += 1;
                         }
                     }
 

@@ -78,6 +78,9 @@ fn handle_single_message(
                 .send_message(client_id, ServerMessage::InitClient(client_id))
                 .unwrap();
             endpoint
+                .send_message(client_id, ServerMessage::SetMode(board.config.mode.clone()))
+                .unwrap();
+            endpoint
                 .send_message(
                     client_id,
                     ServerMessage::SetPrompts(board.config.prompts.clone()),

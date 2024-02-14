@@ -79,11 +79,6 @@ fn main_menu_ui(
                 )
                 .clicked();
             if connect {
-                info!(
-                    "Joining to '{:?}' with username '{}'",
-                    addr.unwrap(),
-                    userdata.username
-                );
                 client_connect.send(StartConnection {
                     username: userdata.username.clone(),
                     addr: addr.unwrap(),
