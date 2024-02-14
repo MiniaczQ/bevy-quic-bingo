@@ -4,7 +4,7 @@ use bevy_quinnet::shared::ClientId;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    bingo::{Mode, WinCondition},
+    bingo::{Board, Mode, WinCondition},
     teams::Team,
 };
 
@@ -22,7 +22,6 @@ pub enum ClientMessage {
         is_active: bool,
     },
     UpdateBoard(BoardPrompts),
-    ResetActivity,
     Kick(ClientId),
 }
 
@@ -33,6 +32,26 @@ pub struct BoardPrompts {
     pub x_size: u8,
     pub y_size: u8,
     pub prompts: Vec<String>,
+}
+
+impl BoardPrompts {
+    pub fn from_board(board: &Board) -> Self {
+        Self {
+            mode: board.mode,
+            win_condition: board.win_condition,
+            x_size: board.x_size,
+            y_size: board.y_size,
+            prompts: board.prompts.clone(),
+        }
+    }
+
+    pub fn same_as_board(&self, board: &Board) -> bool {
+        self.mode == board.mode
+            && self.win_condition == board.win_condition
+            && self.x_size == board.x_size
+            && self.y_size == board.y_size
+            && self.prompts == board.prompts
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

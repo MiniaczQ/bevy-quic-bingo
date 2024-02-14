@@ -26,9 +26,7 @@ struct Clients {
 }
 
 fn broadcast(endpoint: &Endpoint, clients: &Clients, msg: ServerMessage) {
-    endpoint
-        .send_group_message(clients.data.keys().into_iter(), msg)
-        .unwrap();
+    endpoint.try_send_group_message(clients.data.keys().into_iter(), msg);
 }
 
 fn broadcast_clients(endpoint: &Endpoint, clients: &Clients) {
@@ -95,13 +93,7 @@ fn handle_client_messages(
                         endpoint
                             .send_message(
                                 client_id,
-                                ServerMessage::UpdateBoardPrompts(BoardPrompts {
-                                    mode: board.0.mode,
-                                    win_condition: board.0.win_condition,
-                                    x_size: board.0.x_size,
-                                    y_size: board.0.y_size,
-                                    prompts: board.0.prompts.clone(),
-                                }),
+                                ServerMessage::UpdateBoardPrompts(BoardPrompts::from_board(&board)),
                             )
                             .unwrap();
                         endpoint
@@ -149,11 +141,6 @@ fn handle_client_messages(
                             activity.remove(&team);
                         }
                     };
-                    let win = board.check_win();
-                    if let Some(win) = win {
-                        info!("Winner: {:?}", win);
-                    }
-
                     broadcast_board_activity(
                         &endpoint,
                         &clients,
@@ -176,23 +163,7 @@ fn handle_client_messages(
                         prompts: new_board.prompts.clone(),
                         activity: vec![HashSet::default(); flat_size],
                     };
-                    info!("{:?}", new_board.win_condition);
                     broadcast_board_prompts(&endpoint, &clients, new_board);
-                }
-                ClientMessage::ResetActivity => {
-                    let client = clients.data.get_mut(&client_id).unwrap();
-                    if !client.is_host {
-                        continue;
-                    }
-                    let flat_size = board.0.prompts.len();
-                    board.0.activity = vec![HashSet::default(); flat_size];
-                    broadcast_board_activity(
-                        &endpoint,
-                        &clients,
-                        BoardActivity {
-                            activity: board.0.activity.clone(),
-                        },
-                    )
                 }
                 ClientMessage::Kick(client_id) => {
                     endpoint.try_disconnect_client(client_id);

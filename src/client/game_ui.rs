@@ -115,11 +115,17 @@ fn game_menu_ui(
     mut disconnect_events: EventWriter<DisconnectEvent>,
     mut clients: ResMut<Clients>,
     client: Res<Client>,
-    mut board: ResMut<BoardRes>,
+    board: Res<BoardRes>,
+    mut board_settings: Local<Option<BoardPrompts>>,
 ) {
     let Ok(mut ctx) = egui_ctx.get_single_mut() else {
         return;
     };
+
+    if board_settings.is_none() {
+        *board_settings = Some(BoardPrompts::from_board(&board));
+    }
+    let board_settings = board_settings.as_mut().unwrap();
 
     root_element(ctx.get_mut(), |ui| {
         let self_id = clients.self_id;
@@ -172,6 +178,9 @@ fn game_menu_ui(
         ui.separator();
         ui.label("Game Settings");
         ui.separator();
+        ui.label(format!("Mode: {:?}", board.mode));
+        ui.label(format!("Win condition: {}", board.win_condition));
+
         if self_props.is_host {
             let mut mode_changed = false;
             let mut win_condition_changed = false;
@@ -179,22 +188,22 @@ fn game_menu_ui(
             // Mode
             ui.horizontal(|ui| {
                 mode_changed |= ui
-                    .selectable_value(&mut board.mode, Mode::FFA, "FFA")
+                    .selectable_value(&mut board_settings.mode, Mode::FFA, "FFA")
                     .clicked();
                 mode_changed |= ui
-                    .selectable_value(&mut board.mode, Mode::Lockout, "Lockout")
+                    .selectable_value(&mut board_settings.mode, Mode::Lockout, "Lockout")
                     .clicked();
             });
             if mode_changed
-                && board.mode != Mode::Lockout
-                && board.win_condition == WinCondition::Domination
+                && board_settings.mode != Mode::Lockout
+                && board_settings.win_condition == WinCondition::Domination
             {
-                board.win_condition = unflatten_win_contition(WinConditionFlat::InRow);
+                board_settings.win_condition = unflatten_win_contition(WinConditionFlat::InRow);
                 win_condition_changed = true;
             }
 
             // Win condition
-            let mut flat_win_condition = flatten_win_contition(board.win_condition);
+            let mut flat_win_condition = flatten_win_contition(board_settings.win_condition);
             ui.horizontal(|ui| {
                 win_condition_changed |= ui
                     .selectable_value(
@@ -203,7 +212,7 @@ fn game_menu_ui(
                         "N rows of M",
                     )
                     .clicked();
-                if board.mode == Mode::Lockout {
+                if board_settings.mode == Mode::Lockout {
                     win_condition_changed |= ui
                         .selectable_value(
                             &mut flat_win_condition,
@@ -221,51 +230,49 @@ fn game_menu_ui(
                     .clicked();
             });
             if win_condition_changed {
-                board.win_condition = unflatten_win_contition(flat_win_condition);
+                board_settings.win_condition = unflatten_win_contition(flat_win_condition);
             }
-            egui::Grid::new("Win Condition Grid").show(ui, |ui| match &mut board.win_condition {
-                WinCondition::InRow {
-                    ref mut length,
-                    ref mut rows,
-                } => {
-                    ui.label("Row length");
-                    win_condition_changed |=
+            egui::Grid::new("Win Condition Grid").show(ui, |ui| {
+                match &mut board_settings.win_condition {
+                    WinCondition::InRow {
+                        ref mut length,
+                        ref mut rows,
+                    } => {
+                        ui.label("Row length");
                         ui.add(egui::DragValue::new(length).speed(0.03)).changed();
-                    ui.end_row();
-                    ui.label("Row count");
-                    win_condition_changed |=
+                        ui.end_row();
+
+                        ui.label("Row count");
                         ui.add(egui::DragValue::new(rows).speed(0.03)).changed();
-                    ui.end_row();
-                }
-                WinCondition::Domination => {}
-                WinCondition::FirstTo(ref mut n) => {
-                    ui.label("First to");
-                    win_condition_changed |= ui.add(egui::DragValue::new(n).speed(0.03)).changed();
-                    ui.end_row();
+                        ui.end_row();
+                    }
+                    WinCondition::Domination => {}
+                    WinCondition::FirstTo(ref mut n) => {
+                        ui.label("First to");
+                        ui.add(egui::DragValue::new(n).speed(0.03)).changed();
+                        ui.end_row();
+                    }
                 }
             });
 
-            if mode_changed || win_condition_changed {
-                client
-                    .connection()
-                    .try_send_message(ClientMessage::UpdateBoard(BoardPrompts {
-                        mode: board.mode,
-                        win_condition: board.win_condition,
-                        x_size: board.x_size,
-                        y_size: board.y_size,
-                        prompts: board.prompts.clone(),
-                    }));
-            }
+            ui.horizontal(|ui| {
+                let different = !board_settings.same_as_board(&board);
+                let restart = ui
+                    .add_enabled(different, egui::Button::new("Restart game"))
+                    .clicked();
+                if restart {
+                    client
+                        .connection()
+                        .try_send_message(ClientMessage::UpdateBoard(board_settings.clone()));
+                }
 
-            let reset = ui.button("Reset Board").clicked();
-            if reset {
-                client
-                    .connection()
-                    .try_send_message(ClientMessage::ResetActivity);
-            }
-        } else {
-            ui.label(format!("Mode: {:?}", board.mode));
-            ui.label(format!("Win condition: {}", board.win_condition));
+                let cancel = ui
+                    .add_enabled(different, egui::Button::new("Cancel changes"))
+                    .clicked();
+                if cancel {
+                    *board_settings = BoardPrompts::from_board(&board);
+                }
+            });
         }
     });
 }
