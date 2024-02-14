@@ -11,6 +11,7 @@ use crate::{
     common::{
         bingo::Board,
         protocol::{ClientMessage, ServerMessage},
+        teams::Team,
         BoardRes,
     },
     states::AppState,
@@ -32,6 +33,7 @@ impl Plugin for ConnectionPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<StartConnection>()
             .add_event::<StopConnection>()
+            .add_event::<TeamWon>()
             .add_plugins(QuinnetClientPlugin::default())
             .add_systems(
                 Update,
@@ -93,7 +95,11 @@ pub fn stop_connection(
     state.set(AppState::MainMenu);
 }
 
+#[derive(Event)]
+pub struct TeamWon(Team);
+
 fn handle_messages(
+    mut team_won: EventWriter<TeamWon>,
     mut clients: ResMut<Clients>,
     mut client: ResMut<Client>,
     mut board: ResMut<BoardRes>,
@@ -102,7 +108,7 @@ fn handle_messages(
     loop {
         let result = client.connection_mut().receive_message::<ServerMessage>();
         match result {
-            Ok(Some(msg)) => handle_single_message(&mut board, &mut clients, msg),
+            Ok(Some(msg)) => handle_single_message(&mut team_won, &mut board, &mut clients, msg),
             Ok(None) => break,
             Err(_) => {
                 events.send(StopConnection);
@@ -112,7 +118,12 @@ fn handle_messages(
     }
 }
 
-fn handle_single_message(board: &mut Board, clients: &mut Clients, msg: ServerMessage) {
+fn handle_single_message(
+    team_won: &mut EventWriter<TeamWon>,
+    board: &mut Board,
+    clients: &mut Clients,
+    msg: ServerMessage,
+) {
     match msg {
         ServerMessage::InitClient(self_id) => {
             clients.self_id = self_id;
@@ -128,6 +139,11 @@ fn handle_single_message(board: &mut Board, clients: &mut Clients, msg: ServerMe
             board.config.prompts = prompts;
             board.reset_activity();
         }
-        ServerMessage::SetActivity(activity) => board.activity = activity,
+        ServerMessage::SetActivity(activity) => {
+            board.activity = activity;
+            if let Some(team) = board.check_win() {
+                team_won.send(TeamWon(team));
+            }
+        }
     }
 }

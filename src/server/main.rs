@@ -152,6 +152,18 @@ fn handle_single_message(
             board.reset_activity();
             broadcast(&endpoint, &clients, ServerMessage::SetPrompts(prompts));
         }
+        ClientMessage::ResetActivity => {
+            let client = clients.data.get_mut(&client_id).unwrap();
+            if !client.is_host {
+                return;
+            }
+            board.reset_activity();
+            broadcast(
+                &endpoint,
+                &clients,
+                ServerMessage::SetActivity(board.activity.clone()),
+            );
+        }
         ClientMessage::Kick(client_id) => {
             endpoint.try_disconnect_client(client_id);
             handle_disconnect(endpoint, clients, client_id);

@@ -23,6 +23,7 @@ pub enum ClientMessage {
     },
     SetPrompts(BoardPrompts),
     SetMode(BoardMode),
+    ResetActivity,
     Kick(ClientId),
 }
 

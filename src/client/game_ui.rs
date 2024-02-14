@@ -13,7 +13,7 @@ use crate::{
         teams::Team,
         BoardRes,
     },
-    connecting::StopConnection,
+    connecting::{StopConnection, TeamWon},
     states::AppState,
     ui::root_element,
     Clients,
@@ -30,7 +30,12 @@ impl Plugin for GameUiPlugin {
             )
             .add_systems(
                 Update,
-                (create_bingo_window, game_menu_ui, bingo_board_ui)
+                (
+                    create_bingo_window,
+                    game_menu_ui,
+                    bingo_board_ui,
+                    play_win_sfx,
+                )
                     .run_if(in_state(AppState::Playing)),
             );
     }
@@ -264,21 +269,25 @@ fn game_menu_ui(
                 let different_prompts = board_conf.prompts != board.config.prompts;
                 let different = different_mode || different_prompts;
 
-                let restart = ui
-                    .add_enabled(different, egui::Button::new("Restart game"))
-                    .clicked();
+                let restart = ui.button("Restart game").clicked();
                 if restart {
-                    if different_mode {
+                    if different {
+                        if different_mode {
+                            client
+                                .connection()
+                                .try_send_message(ClientMessage::SetMode(board_conf.mode.clone()));
+                        }
+                        if different_prompts {
+                            client
+                                .connection()
+                                .try_send_message(ClientMessage::SetPrompts(
+                                    board_conf.prompts.clone(),
+                                ));
+                        }
+                    } else {
                         client
                             .connection()
-                            .try_send_message(ClientMessage::SetMode(board_conf.mode.clone()));
-                    }
-                    if different_prompts {
-                        client
-                            .connection()
-                            .try_send_message(ClientMessage::SetPrompts(
-                                board_conf.prompts.clone(),
-                            ));
+                            .try_send_message(ClientMessage::ResetActivity);
                     }
                 }
 
@@ -341,10 +350,11 @@ fn remove_bingo_window(
     camera: Query<Entity, With<BingoWindowCamera>>,
 ) {
     if let Ok(window_id) = window.get_single() {
-        commands.entity(window_id).despawn_recursive();
+        commands.entity(window_id).despawn();
     }
-    let camera_id = camera.single();
-    commands.entity(camera_id).despawn_recursive();
+    if let Ok(camera_id) = camera.get_single() {
+        commands.entity(camera_id).despawn();
+    }
 }
 
 fn bingo_board_ui(
@@ -451,5 +461,31 @@ fn add_bingo_field(
                     is_active: !was_active,
                 });
         }
+    }
+}
+
+#[derive(Component)]
+struct TeamWonSfx;
+
+fn play_win_sfx(
+    asset_server: Res<AssetServer>,
+    mut commands: Commands,
+    mut team_won: EventReader<TeamWon>,
+    sfxs: Query<Entity, With<TeamWonSfx>>,
+) {
+    for _ in team_won.read() {
+        for sfx in sfxs.iter() {
+            commands.entity(sfx).despawn();
+        }
+
+        let source = asset_server.load("sfx/win.ogg");
+
+        commands.spawn((
+            TeamWonSfx,
+            AudioBundle {
+                source,
+                settings: PlaybackSettings::ONCE,
+            },
+        ));
     }
 }
