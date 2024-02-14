@@ -191,30 +191,29 @@ fn game_menu_ui(
         ));
 
         if self_props.is_host {
-            let mut mode_changed = false;
-            let mut win_condition_changed = false;
-
             // Mode
+            let mut mode_game_mode_changed = false;
             ui.horizontal(|ui| {
-                mode_changed |= ui
+                mode_game_mode_changed |= ui
                     .selectable_value(&mut mode_conf.game_mode, GameMode::FFA, "FFA")
                     .clicked();
-                mode_changed |= ui
+                mode_game_mode_changed |= ui
                     .selectable_value(&mut mode_conf.game_mode, GameMode::Lockout, "Lockout")
                     .clicked();
             });
-            if mode_changed
+
+            // Win condition
+            let mut mode_win_condition_changed = false;
+            if mode_game_mode_changed
                 && mode_conf.game_mode != GameMode::Lockout
                 && mode_conf.win_condition == WinCondition::Domination
             {
                 mode_conf.win_condition = FlatWinCondition::InRow.unflatten();
-                win_condition_changed = true;
+                mode_win_condition_changed = true;
             }
-
-            // Win condition
             let mut flat_win_condition = FlatWinCondition::flatten(mode_conf.win_condition);
             ui.horizontal(|ui| {
-                win_condition_changed |= ui
+                mode_win_condition_changed |= ui
                     .selectable_value(
                         &mut flat_win_condition,
                         FlatWinCondition::InRow,
@@ -222,7 +221,7 @@ fn game_menu_ui(
                     )
                     .clicked();
                 if mode_conf.game_mode == GameMode::Lockout {
-                    win_condition_changed |= ui
+                    mode_win_condition_changed |= ui
                         .selectable_value(
                             &mut flat_win_condition,
                             FlatWinCondition::Domination,
@@ -230,7 +229,7 @@ fn game_menu_ui(
                         )
                         .clicked();
                 }
-                win_condition_changed |= ui
+                mode_win_condition_changed |= ui
                     .selectable_value(
                         &mut flat_win_condition,
                         FlatWinCondition::FirstTo,
@@ -238,7 +237,7 @@ fn game_menu_ui(
                     )
                     .clicked();
             });
-            if win_condition_changed {
+            if mode_win_condition_changed {
                 mode_conf.win_condition = flat_win_condition.unflatten();
             }
             egui::Grid::new("Win Condition Grid").show(ui, |ui| {
@@ -248,26 +247,30 @@ fn game_menu_ui(
                         ref mut rows,
                     } => {
                         ui.label("Row length");
-                        ui.add(egui::DragValue::new(length).speed(0.03));
+                        mode_win_condition_changed |=
+                            ui.add(egui::DragValue::new(length).speed(0.03)).changed();
                         ui.end_row();
 
                         ui.label("Row count");
-                        ui.add(egui::DragValue::new(rows).speed(0.03));
+                        mode_win_condition_changed |=
+                            ui.add(egui::DragValue::new(rows).speed(0.03)).changed();
                         ui.end_row();
                     }
                     WinCondition::Domination => {}
                     WinCondition::FirstTo(ref mut n) => {
                         ui.label("First to");
-                        ui.add(egui::DragValue::new(n).speed(0.03));
+                        mode_win_condition_changed |=
+                            ui.add(egui::DragValue::new(n).speed(0.03)).changed();
                         ui.end_row();
                     }
                 }
             });
+            mode_conf.changed |= mode_game_mode_changed || mode_win_condition_changed;
 
-            let mut size_changed = false;
+            let mut prompts_size_changed = false;
             egui::Grid::new("Bingo Size Grid").show(ui, |ui| {
                 ui.label("Width");
-                size_changed |= ui
+                prompts_size_changed |= ui
                     .add(
                         egui::DragValue::new(&mut prompts_conf.x_size)
                             .speed(0.03)
@@ -276,7 +279,7 @@ fn game_menu_ui(
                     .changed();
                 ui.end_row();
                 ui.label("Height");
-                size_changed |= ui
+                prompts_size_changed |= ui
                     .add(
                         egui::DragValue::new(&mut prompts_conf.y_size)
                             .speed(0.03)
@@ -285,10 +288,9 @@ fn game_menu_ui(
                     .changed();
                 ui.end_row();
             });
-            prompts_conf.changed |= size_changed;
 
-            let randomize = ui.button("Randomize prompts").clicked() | size_changed;
-            if randomize {
+            let randomize = ui.button("Randomize prompts").clicked();
+            if randomize | prompts_size_changed {
                 let mut prompts = vec![String::from("a"), String::from("b"), String::from("c")];
                 let prompt_count = prompts.len();
                 let target_prompt_count =
@@ -298,22 +300,21 @@ fn game_menu_ui(
                 prompts.truncate(target_prompt_count);
                 prompts_conf.prompts.prompts = prompts;
             }
-            prompts_conf.changed |= randomize;
+            prompts_conf.changed |= prompts_size_changed || randomize;
 
             // Send update
             ui.horizontal(|ui| {
-                let mode_changed = **mode_conf != board.config.mode;
-                let different = mode_changed || prompts_conf.changed;
+                let different = mode_conf.changed || prompts_conf.changed;
 
                 let restart = ui
                     .add_enabled(
-                        different || !board.activity.activity.is_empty(),
+                        different || board.activity.activity.iter().any(|x| !x.is_empty()),
                         egui::Button::new("Restart game"),
                     )
                     .clicked();
                 if restart {
                     if different {
-                        if mode_changed {
+                        if mode_conf.changed {
                             client
                                 .connection()
                                 .try_send_message(ClientMessage::SetMode(mode_conf.clone()));
@@ -336,6 +337,7 @@ fn game_menu_ui(
                     .clicked();
                 if cancel {
                     **mode_conf = board.config.mode.clone();
+                    mode_conf.changed = false;
                     **prompts_conf = board.config.prompts.clone();
                     prompts_conf.changed = false;
                 }
@@ -578,9 +580,10 @@ fn resize_window(
             false => &board.config.prompts,
         };
         let (width, height) = size_from_board(prompts);
+
         let (window_width, window_height) = (window.resolution.width(), window.resolution.height());
         if width != window_width || height != window_height {
-            window.resolution = WindowResolution::new(width, height);
+            window.resolution.set(width, height)
         }
     }
 }

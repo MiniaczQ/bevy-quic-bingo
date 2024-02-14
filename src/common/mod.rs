@@ -29,19 +29,22 @@ impl DerefMut for BoardRes {
 }
 
 #[derive(Resource, Default)]
-pub struct ConfMode(BoardMode);
+pub struct ConfMode {
+    pub mode: BoardMode,
+    pub changed: bool,
+}
 
 impl Deref for ConfMode {
     type Target = BoardMode;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.mode
     }
 }
 
 impl DerefMut for ConfMode {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        &mut self.mode
     }
 }
 

@@ -12,7 +12,7 @@ use crate::{
         bingo::Board,
         protocol::{ClientMessage, ServerMessage},
         teams::Team,
-        BoardRes,
+        BoardRes, ConfMode, ConfPrompts,
     },
     states::AppState,
     Clients,
@@ -103,12 +103,21 @@ fn handle_messages(
     mut clients: ResMut<Clients>,
     mut client: ResMut<Client>,
     mut board: ResMut<BoardRes>,
+    mut mode_conf: ResMut<ConfMode>,
+    mut prompts_conf: ResMut<ConfPrompts>,
     mut events: EventWriter<StopConnection>,
 ) {
     loop {
         let result = client.connection_mut().receive_message::<ServerMessage>();
         match result {
-            Ok(Some(msg)) => handle_single_message(&mut team_won, &mut board, &mut clients, msg),
+            Ok(Some(msg)) => handle_single_message(
+                &mut team_won,
+                &mut board,
+                &mut clients,
+                &mut mode_conf,
+                &mut prompts_conf,
+                msg,
+            ),
             Ok(None) => break,
             Err(_) => {
                 events.send(StopConnection);
@@ -122,6 +131,8 @@ fn handle_single_message(
     team_won: &mut EventWriter<TeamWon>,
     board: &mut Board,
     clients: &mut Clients,
+    mode_conf: &mut ConfMode,
+    prompts_conf: &mut ConfPrompts,
     msg: ServerMessage,
 ) {
     match msg {
@@ -132,11 +143,15 @@ fn handle_single_message(
             clients.data = new_clients;
         }
         ServerMessage::SetMode(mode) => {
-            board.config.mode = mode;
+            board.config.mode = mode.clone();
+            mode_conf.mode = mode;
+            mode_conf.changed = false;
             board.reset_activity();
         }
         ServerMessage::SetPrompts(prompts) => {
-            board.config.prompts = prompts;
+            board.config.prompts = prompts.clone();
+            prompts_conf.prompts = prompts;
+            prompts_conf.changed = false;
             board.reset_activity();
         }
         ServerMessage::SetActivity(activity) => {
