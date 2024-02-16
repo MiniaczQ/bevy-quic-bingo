@@ -4,9 +4,12 @@ use serde::{Deserialize, Serialize};
 
 use super::teams::Team;
 
+/// Bingo game mode
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum GameMode {
+    /// Only one team can claim a field
     Lockout,
+    /// Every team can claim every field
     FFA,
 }
 
@@ -16,6 +19,7 @@ impl Display for GameMode {
     }
 }
 
+/// Combined game mode and win condition
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BoardMode {
     pub game_mode: GameMode,
@@ -31,6 +35,7 @@ impl Default for BoardMode {
     }
 }
 
+/// Size and prompts of the board
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BoardPrompts {
     pub x_size: u8,
@@ -49,22 +54,26 @@ impl Default for BoardPrompts {
 }
 
 impl BoardPrompts {
+    /// Calculate offset to access a specific field in the prompt vector
     pub fn offset(&self, x: u8, y: u8) -> usize {
         x as usize * self.y_size as usize + y as usize
     }
 
+    /// Get a read-only access to a prompt
     pub fn prompt(&self, x: u8, y: u8) -> &String {
         let offset = self.offset(x, y);
         &self.prompts[offset]
     }
 }
 
+/// Activity of all teams on the board
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BoardActivity {
     pub activity: Vec<HashSet<Team>>,
 }
 
 impl BoardActivity {
+    /// Instance with no activity
     pub fn empty(size: usize) -> Self {
         Self {
             activity: vec![HashSet::new(); size],
@@ -72,6 +81,7 @@ impl BoardActivity {
     }
 }
 
+/// Game-constant configuration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BoardConfig {
     pub mode: BoardMode,
@@ -87,6 +97,7 @@ impl Default for BoardConfig {
     }
 }
 
+/// Game-constant and dynamic board data
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Board {
     pub config: BoardConfig,
@@ -123,117 +134,119 @@ impl Board {
 
     pub fn check_win(&self) -> Option<Team> {
         match self.config.mode.win_condition {
-            WinCondition::InRow { length, rows } => {
-                for team in Team::iter() {
-                    let mut winning_rows = 0;
-                    let x_size = self.config.prompts.x_size;
-                    let y_size = self.config.prompts.y_size;
-                    // L-R
-                    if length <= y_size {
-                        for sx in 0..x_size {
-                            'xy: for sy in 0..y_size + 1 - length {
-                                for d in 0..length {
-                                    if !self.is_active(sx, sy + d, team) {
-                                        continue 'xy;
-                                    }
-                                }
-                                winning_rows += 1;
-                            }
-                        }
-                    }
-                    // T-D
-                    if length <= x_size {
-                        for sx in 0..x_size + 1 - length {
-                            'xy: for sy in 0..y_size {
-                                for d in 0..length {
-                                    if !self.is_active(sx + d, sy, team) {
-                                        continue 'xy;
-                                    }
-                                }
-                                winning_rows += 1;
-                            }
-                        }
-                    }
-                    // TL-BR
-                    if length <= x_size && length <= y_size {
-                        for sx in 0..x_size + 1 - length {
-                            'xy: for sy in 0..y_size + 1 - length {
-                                for d in 0..length {
-                                    if !self.is_active(sx + d, sy + d, team) {
-                                        continue 'xy;
-                                    }
-                                }
-                                winning_rows += 1;
-                            }
-                        }
-                    }
-                    // BL-TR
-                    if length <= x_size && length <= y_size {
-                        for sx in 0..x_size + 1 - length {
-                            'xy: for sy in 0..y_size + 1 - length {
-                                for d in 0..length {
-                                    if !self.is_active(sx + d, y_size - sy - d - 1, team) {
-                                        continue 'xy;
-                                    }
-                                }
-                                winning_rows += 1;
-                            }
-                        }
-                    }
+            WinCondition::InRow { length, rows } => self.check_win_in_row(length, rows),
+            WinCondition::Domination => self.check_win_domination(),
+            WinCondition::FirstTo(n) => self.check_win_first_to(n),
+        }
+    }
 
-                    if winning_rows >= rows {
-                        return Some(*team);
+    fn check_win_in_row(&self, length: u8, rows: u8) -> Option<Team> {
+        for team in Team::iter() {
+            let mut winning_rows = 0;
+            let x_size = self.config.prompts.x_size;
+            let y_size = self.config.prompts.y_size;
+            // L-R
+            if length <= y_size {
+                for sx in 0..x_size {
+                    'xy: for sy in 0..y_size + 1 - length {
+                        for d in 0..length {
+                            if !self.is_active(sx, sy + d, team) {
+                                continue 'xy;
+                            }
+                        }
+                        winning_rows += 1;
                     }
                 }
-                None
             }
-            WinCondition::Domination => {
-                if self.config.mode.game_mode != GameMode::Lockout {
-                    return None;
-                }
-
-                let mut total_count = 0;
-                let mut team_counts = Vec::<(Team, u32)>::new();
-                for team in Team::iter() {
-                    let mut count = 0;
-                    for x in 0..self.config.prompts.x_size {
-                        for y in 0..self.config.prompts.y_size {
-                            if self.is_active(x, y, team) {
-                                count += 1;
+            // T-D
+            if length <= x_size {
+                for sx in 0..x_size + 1 - length {
+                    'xy: for sy in 0..y_size {
+                        for d in 0..length {
+                            if !self.is_active(sx + d, sy, team) {
+                                continue 'xy;
                             }
                         }
+                        winning_rows += 1;
                     }
-                    team_counts.push((*team, count));
-                    total_count += count;
                 }
-                let free_space = self.config.prompts.x_size as u32
-                    * self.config.prompts.y_size as u32
-                    - total_count;
-
-                team_counts.sort_by(|a, b| b.1.cmp(&a.1));
-                if free_space + team_counts[1].1 < team_counts[0].1 {
-                    return Some(team_counts[0].0);
-                }
-
-                None
             }
-            WinCondition::FirstTo(n) => {
-                for team in Team::iter() {
-                    let mut count = 0;
-                    for x in 0..self.config.prompts.x_size {
-                        for y in 0..self.config.prompts.y_size {
-                            if self.is_active(x, y, team) {
-                                count += 1;
+            // TL-BR
+            if length <= x_size && length <= y_size {
+                for sx in 0..x_size + 1 - length {
+                    'xy: for sy in 0..y_size + 1 - length {
+                        for d in 0..length {
+                            if !self.is_active(sx + d, sy + d, team) {
+                                continue 'xy;
                             }
                         }
-                    }
-                    if count >= n {
-                        return Some(*team);
+                        winning_rows += 1;
                     }
                 }
-                None
+            }
+            // BL-TR
+            if length <= x_size && length <= y_size {
+                for sx in 0..x_size + 1 - length {
+                    'xy: for sy in 0..y_size + 1 - length {
+                        for d in 0..length {
+                            if !self.is_active(sx + d, y_size - sy - d - 1, team) {
+                                continue 'xy;
+                            }
+                        }
+                        winning_rows += 1;
+                    }
+                }
+            }
+
+            if winning_rows >= rows {
+                return Some(*team);
             }
         }
+        None
+    }
+
+    fn check_win_first_to(&self, n: u8) -> Option<Team> {
+        for team in Team::iter() {
+            let mut count = 0;
+            for x in 0..self.config.prompts.x_size {
+                for y in 0..self.config.prompts.y_size {
+                    if self.is_active(x, y, team) {
+                        count += 1;
+                    }
+                }
+            }
+            if count >= n {
+                return Some(*team);
+            }
+        }
+        None
+    }
+
+    fn check_win_domination(&self) -> Option<Team> {
+        if self.config.mode.game_mode != GameMode::Lockout {
+            return None;
+        }
+        let mut total_count = 0;
+        let mut team_counts = Vec::<(Team, u32)>::new();
+        for team in Team::iter() {
+            let mut count = 0;
+            for x in 0..self.config.prompts.x_size {
+                for y in 0..self.config.prompts.y_size {
+                    if self.is_active(x, y, team) {
+                        count += 1;
+                    }
+                }
+            }
+            team_counts.push((*team, count));
+            total_count += count;
+        }
+        let free_space =
+            self.config.prompts.x_size as u32 * self.config.prompts.y_size as u32 - total_count;
+        team_counts.sort_by(|a, b| b.1.cmp(&a.1));
+        if free_space + team_counts[1].1 < team_counts[0].1 {
+            return Some(team_counts[0].0);
+        }
+        None
     }
 }
 
@@ -245,10 +258,14 @@ impl Default for Board {
     }
 }
 
+/// Game win condition
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum WinCondition {
+    /// Get N lines of M length
     InRow { length: u8, rows: u8 },
+    /// Get most fields
     Domination,
+    /// Get at least N fields
     FirstTo(u8),
 }
 
