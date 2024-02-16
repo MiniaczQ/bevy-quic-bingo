@@ -310,7 +310,9 @@ fn game_menu_ui(
                 let prompt_count = prompts.len();
                 let target_prompt_count =
                     prompts_conf.x_size as usize * prompts_conf.y_size as usize;
-                prompts.extend(vec![String::new(); target_prompt_count - prompt_count]);
+                if target_prompt_count > prompt_count {
+                    prompts.extend(vec![String::new(); target_prompt_count - prompt_count]);
+                }
                 prompts.shuffle(&mut rand::thread_rng());
                 prompts.truncate(target_prompt_count);
                 prompts_conf.prompts.prompts = prompts;
