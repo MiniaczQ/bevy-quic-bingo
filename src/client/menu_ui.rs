@@ -16,7 +16,7 @@ impl Plugin for MenuUiPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(EguiPlugin)
             .add_plugins(UserdataPlugin)
-            .add_systems(Update, main_menu_ui.run_if(in_state(AppState::MainMenu)));
+            .add_systems(Update, ui_root.run_if(in_state(AppState::MainMenu)));
     }
 }
 
@@ -44,7 +44,7 @@ fn add_validated_textbox(
     }))
 }
 
-fn main_menu_ui(
+fn ui_root(
     mut egui_ctx: Query<&mut EguiContext, With<PrimaryWindow>>,
     mut app_exit: EventWriter<AppExit>,
     mut userdata: ResMut<Userdata>,

@@ -10,6 +10,7 @@ mod scoped;
 mod states;
 mod ui;
 mod userdata;
+mod storage;
 
 use bevy::{
     prelude::*,
