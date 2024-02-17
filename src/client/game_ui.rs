@@ -7,6 +7,7 @@ use bevy::{
 use bevy_egui::EguiContext;
 use bevy_quinnet::client::Client;
 use rand::seq::SliceRandom;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     common::{
@@ -19,6 +20,7 @@ use crate::{
     fit_text::PromptLayoutCache,
     scoped::Scoped,
     states::AppState,
+    storage::{Storage, StoragePath},
     ui::root_element,
     Clients,
 };
@@ -44,11 +46,12 @@ impl Plugin for GameUiPlugin {
 }
 
 fn add_resources(mut commands: Commands) {
-    commands.insert_resource(BoardRes::default());
-    commands.insert_resource(Clients::default());
-    commands.insert_resource(ConfMode::default());
-    commands.insert_resource(ConfPrompts::default());
-    commands.insert_resource(PromptLayoutCache::default());
+    commands.init_resource::<BoardRes>();
+    commands.init_resource::<Clients>();
+    commands.init_resource::<ConfMode>();
+    commands.init_resource::<ConfPrompts>();
+    commands.init_resource::<PromptLayoutCache>();
+    commands.init_resource::<Storage<PromptsString>>();
 }
 
 fn remove_resources(mut commands: Commands) {
@@ -57,6 +60,7 @@ fn remove_resources(mut commands: Commands) {
     commands.remove_resource::<ConfMode>();
     commands.remove_resource::<ConfPrompts>();
     commands.remove_resource::<PromptLayoutCache>();
+    commands.remove_resource::<Storage<PromptsString>>();
 }
 
 fn team_to_ui(ui: &mut egui::Ui, value: &mut Option<Team>, team: Option<Team>) -> egui::Response {
@@ -123,6 +127,17 @@ impl FlatWinCondition {
     }
 }
 
+#[derive(Clone, Serialize, Deserialize, Default)]
+struct PromptsString {
+    prompts: String,
+}
+
+impl StoragePath for PromptsString {
+    fn path() -> impl AsRef<std::path::Path> + Send + 'static {
+        "prompts.toml"
+    }
+}
+
 fn game_menu_ui(
     mut egui_ctx: Query<&mut EguiContext, With<PrimaryWindow>>,
     mut disconnect_events: EventWriter<StopConnection>,
@@ -131,12 +146,16 @@ fn game_menu_ui(
     board: Res<BoardRes>,
     mut mode_conf: ResMut<ConfMode>,
     mut prompts_conf: ResMut<ConfPrompts>,
-    mut prompts_str: Local<String>,
+    mut prompts_str_storage: ResMut<Storage<PromptsString>>,
     mut cache: ResMut<PromptLayoutCache>,
 ) {
     let Ok(mut ctx) = egui_ctx.get_single_mut() else {
         return;
     };
+    let Some(prompts_str) = prompts_str_storage.get() else {
+        return;
+    };
+    let mut prompt_str_changed = false;
 
     root_element(ctx.get_mut(), |ui| {
         let self_id = clients.self_id;
@@ -297,6 +316,7 @@ fn game_menu_ui(
             let randomize = ui.button("Randomize prompts").clicked();
             if randomize | prompts_size_changed {
                 let mut prompts = prompts_str
+                    .prompts
                     .split('\n')
                     .filter_map(|x| {
                         let x = x.trim();
@@ -367,9 +387,15 @@ fn game_menu_ui(
             egui::ScrollArea::vertical()
                 .auto_shrink(false)
                 .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
-                .show(ui, |ui| ui.text_edit_multiline(&mut *prompts_str));
+                .show(ui, |ui| {
+                    prompt_str_changed |= ui.text_edit_multiline(&mut prompts_str.prompts).changed()
+                });
         }
     });
+
+    if prompt_str_changed {
+        prompts_str_storage.queue_save();
+    }
 }
 
 #[derive(Component)]

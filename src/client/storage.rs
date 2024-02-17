@@ -13,8 +13,8 @@ where
 {
     runtime: tokio::runtime::Handle,
     data: Option<T>,
-    save_task: Option<tokio::task::JoinHandle<Result<()>>>,
-    load_task: Option<tokio::task::JoinHandle<Result<T>>>,
+    save_task: Option<tokio::task::JoinHandle<()>>,
+    load_task: Option<tokio::task::JoinHandle<Option<T>>>,
 }
 
 impl<T> Storage<T>
@@ -59,6 +59,12 @@ impl<T> Storage<T>
 where
     T: StoragePath,
 {
+    async fn load(path: impl AsRef<std::path::Path> + Send + 'static) -> Result<T> {
+        let string = tokio::fs::read_to_string(path).await?;
+        let data = toml::de::from_str(&string)?;
+        Ok(data)
+    }
+
     pub fn queue_load(&mut self) {
         if let Some(task) = self.load_task.take() {
             if task.is_finished() {
@@ -69,10 +75,30 @@ where
         }
         let path = T::path();
         self.load_task = Some(self.runtime.spawn(async {
-            let string = tokio::fs::read_to_string(path).await?;
-            let data = toml::de::from_str(&string)?;
-            Ok(data)
+            let result = Self::load(path).await;
+            match result {
+                Err(e) => {
+                    if let StorageError::Io(e) = &e {
+                        if e.kind() == std::io::ErrorKind::NotFound {
+                            return Some(T::default());
+                        }
+                    }
+                    warn!(
+                        "Failed to load {} due to error {}",
+                        std::any::type_name::<T>(),
+                        e
+                    );
+                    None
+                }
+                Ok(v) => Some(v),
+            }
         }))
+    }
+
+    async fn save(data: T, path: impl AsRef<std::path::Path> + Send + 'static) -> Result<()> {
+        let string = toml::ser::to_string_pretty(&data)?;
+        tokio::fs::write(path, string).await?;
+        Ok(())
     }
 
     pub fn queue_save(&mut self) {
@@ -82,10 +108,15 @@ where
         let data = self.data.clone().unwrap();
         let path = T::path();
         self.save_task = Some(self.runtime.spawn(async move {
-            let string = toml::ser::to_string_pretty(&data)?;
-            tokio::fs::write(path, string).await?;
-            Ok(())
-        }))
+            let result = Self::save(data, path).await;
+            if let Err(e) = result {
+                warn!(
+                    "Failed to save {} due to error {}",
+                    std::any::type_name::<T>(),
+                    e
+                );
+            }
+        }));
     }
 
     pub fn get(&mut self) -> Option<&mut T> {
@@ -102,21 +133,8 @@ where
             .runtime
             .block_on(self.load_task.take().unwrap())
             .unwrap();
-        match result {
-            Ok(v) => self.data = Some(v),
-            Err(e) => {
-                if let StorageError::Io(e) = &e {
-                    if e.kind() == std::io::ErrorKind::NotFound {
-                        self.data = Some(T::default());
-                        return;
-                    }
-                }
-                warn!(
-                    "Failed to load {} due to error {}",
-                    std::any::type_name::<T>(),
-                    e
-                )
-            }
+        if let Some(data) = result {
+            self.data = Some(data);
         }
     }
 }
