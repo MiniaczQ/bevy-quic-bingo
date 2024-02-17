@@ -18,7 +18,7 @@ rand = "0.8.5"
 serde = "1.0.196"
 thiserror = "1.0.57"
 toml = { version = "0.8.10", features = ["display", "parse"] }
-tokio = { version = "1.29.1", features = ["sync"] }
+tokio = { version = "1.29.1", features = ["sync", "fs"] }
 bevy_egui = "0.24.0"
 egui = "0.24.0"
 

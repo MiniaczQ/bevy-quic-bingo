@@ -6,8 +6,9 @@ use bevy_egui::{EguiContext, EguiPlugin};
 use crate::{
     connecting::StartConnection,
     states::AppState,
+    storage::Storage,
     ui::root_element,
-    userdata::{Userdata, UserdataPlugin},
+    userdata::{Userdata, UserdataPlugin, USERDATA_PATH},
 };
 
 pub struct MenuUiPlugin;
@@ -47,27 +48,34 @@ fn add_validated_textbox(
 fn ui_root(
     mut egui_ctx: Query<&mut EguiContext, With<PrimaryWindow>>,
     mut app_exit: EventWriter<AppExit>,
-    mut userdata: ResMut<Userdata>,
+    mut userdata_storage: ResMut<Storage<Userdata>>,
     mut client_connect: EventWriter<StartConnection>,
 ) {
     let Ok(mut ctx) = egui_ctx.get_single_mut() else {
         return;
     };
+    let Some(userdata) = userdata_storage.get() else {
+        return;
+    };
 
     let addr: Option<SocketAddr> = userdata.addr.parse().ok();
     let valid_username = validate_username(&userdata.username);
+    let mut userdata_changed = false;
 
     root_element(ctx.get_mut(), |ui| {
         egui::Grid::new("Main Menu Grid")
             .num_columns(2)
             .show(ui, |ui| {
                 ui.label("Username:");
-                add_validated_textbox(ui, valid_username, &mut userdata.username)
-                    .on_hover_text("4-32 alphanumerics");
+                userdata_changed |=
+                    add_validated_textbox(ui, valid_username, &mut userdata.username)
+                        .on_hover_text("4-32 alphanumerics")
+                        .changed();
                 ui.end_row();
 
                 ui.label("Address:");
-                add_validated_textbox(ui, addr.is_some(), &mut userdata.addr);
+                userdata_changed |=
+                    add_validated_textbox(ui, addr.is_some(), &mut userdata.addr).changed();
                 ui.end_row();
             });
 
@@ -91,4 +99,8 @@ fn ui_root(
             }
         });
     });
+
+    if userdata_changed {
+        userdata_storage.queue_save(USERDATA_PATH);
+    }
 }
