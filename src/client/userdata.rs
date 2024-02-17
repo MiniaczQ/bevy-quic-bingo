@@ -1,8 +1,10 @@
 use bevy::prelude::*;
-use bevy_quinnet::shared::AsyncRuntime;
 use serde::{Deserialize, Serialize};
 
-use crate::{states::AppState, storage::Storage};
+use crate::{
+    states::AppState,
+    storage::{Storage, StoragePath},
+};
 
 pub struct UserdataPlugin;
 
@@ -13,12 +15,8 @@ impl Plugin for UserdataPlugin {
     }
 }
 
-pub const USERDATA_PATH: &str = "userdata.toml";
-
-fn insert_userdata(mut commands: Commands, runtime: Res<AsyncRuntime>) {
-    let mut userdata = Storage::<Userdata>::new(runtime.handle().clone());
-    userdata.queue_load(USERDATA_PATH);
-    commands.insert_resource(userdata);
+fn insert_userdata(mut commands: Commands) {
+    commands.init_resource::<Storage<Userdata>>();
 }
 
 fn remove_userdata(mut commands: Commands) {
@@ -29,4 +27,10 @@ fn remove_userdata(mut commands: Commands) {
 pub struct Userdata {
     pub username: String,
     pub addr: String,
+}
+
+impl StoragePath for Userdata {
+    fn path() -> impl AsRef<std::path::Path> + Send + 'static {
+        "userdata.toml"
+    }
 }

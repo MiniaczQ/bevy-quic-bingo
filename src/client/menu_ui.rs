@@ -8,7 +8,7 @@ use crate::{
     states::AppState,
     storage::Storage,
     ui::root_element,
-    userdata::{Userdata, UserdataPlugin, USERDATA_PATH},
+    userdata::{Userdata, UserdataPlugin},
 };
 
 pub struct MenuUiPlugin;
@@ -101,6 +101,6 @@ fn ui_root(
     });
 
     if userdata_changed {
-        userdata_storage.queue_save(USERDATA_PATH);
+        userdata_storage.queue_save();
     }
 }

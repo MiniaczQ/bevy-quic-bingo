@@ -1,10 +1,15 @@
 use bevy::{ecs::world::FromWorld, log::warn};
+use bevy_quinnet::shared::AsyncRuntime;
 use serde::{de::DeserializeOwned, Serialize};
+
+pub trait StoragePath: Default + Clone + Serialize + DeserializeOwned + Send + 'static {
+    fn path() -> impl AsRef<std::path::Path> + Send + 'static;
+}
 
 #[derive(bevy::prelude::Resource)]
 pub struct Storage<T>
 where
-    T: Clone + Serialize + DeserializeOwned,
+    T: StoragePath,
 {
     runtime: tokio::runtime::Handle,
     data: Option<T>,
@@ -14,15 +19,27 @@ where
 
 impl<T> Storage<T>
 where
-    T: Default + Clone + Serialize + DeserializeOwned + Send + 'static,
+    T: StoragePath,
 {
     pub fn new(runtime: tokio::runtime::Handle) -> Self {
-        Self {
+        let mut this = Self {
             runtime: runtime,
             data: Default::default(),
             save_task: Default::default(),
             load_task: Default::default(),
-        }
+        };
+        this.queue_load();
+        this
+    }
+}
+
+impl<T> FromWorld for Storage<T>
+where
+    T: StoragePath,
+{
+    fn from_world(world: &mut bevy::prelude::World) -> Self {
+        let handle = world.resource::<AsyncRuntime>().handle().clone();
+        Self::new(handle)
     }
 }
 
@@ -40,9 +57,9 @@ type Result<T> = std::result::Result<T, StorageError>;
 
 impl<T> Storage<T>
 where
-    T: Default + Clone + Serialize + DeserializeOwned + Send + 'static,
+    T: StoragePath,
 {
-    pub fn queue_load(&mut self, path: impl AsRef<std::path::Path> + Send + 'static) {
+    pub fn queue_load(&mut self) {
         if let Some(task) = self.load_task.take() {
             if task.is_finished() {
                 self.set_from_load_task();
@@ -50,6 +67,7 @@ where
                 task.abort();
             }
         }
+        let path = T::path();
         self.load_task = Some(self.runtime.spawn(async {
             let string = tokio::fs::read_to_string(path).await?;
             let data = toml::de::from_str(&string)?;
@@ -57,11 +75,12 @@ where
         }))
     }
 
-    pub fn queue_save(&mut self, path: impl AsRef<std::path::Path> + Send + 'static) {
+    pub fn queue_save(&mut self) {
         if let Some(task) = self.save_task.take() {
             task.abort();
         }
         let data = self.data.clone().unwrap();
+        let path = T::path();
         self.save_task = Some(self.runtime.spawn(async move {
             let string = toml::ser::to_string_pretty(&data)?;
             tokio::fs::write(path, string).await?;
