@@ -7,17 +7,14 @@ use bevy_quinnet::client::{
     Client, QuinnetClientPlugin,
 };
 
-use crate::{
-    common::{
-        bingo::Board,
-        protocol::{ClientMessage, ServerMessage},
-        teams::Team,
-        BoardRes, ConfMode, ConfPrompts,
-    },
-    fit_text::PromptLayoutCache,
-    states::AppState,
-    Clients,
+use common::{
+    bingo::Board,
+    protocol::{ClientMessage, ServerMessage},
+    teams::Team,
+    BoardRes, ConfMode, ConfPrompts,
 };
+
+use crate::{fit_text::PromptLayoutCache, states::AppState, Clients};
 
 #[derive(Event)]
 pub struct StartConnection {
@@ -88,9 +85,8 @@ pub fn stop_connection(
     connection_lost.clear();
     stop_connection.clear();
 
-    client
-        .get_connection()
-        .map(|c| c.try_send_message(ClientMessage::Disconnect {}));
+    if let Some(c) = client
+        .get_connection() { c.try_send_message(ClientMessage::Disconnect {}) }
     sleep(Duration::from_secs_f32(0.1));
     client.close_all_connections().ok();
     state.set(AppState::MainMenu);
@@ -99,6 +95,7 @@ pub fn stop_connection(
 #[derive(Event)]
 pub struct TeamWon(Team);
 
+#[allow(clippy::too_many_arguments)]
 fn handle_messages(
     mut team_won: EventWriter<TeamWon>,
     mut clients: ResMut<Clients>,

@@ -83,19 +83,13 @@ impl BoardActivity {
 
 /// Game-constant configuration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Default)]
 pub struct BoardConfig {
     pub mode: BoardMode,
     pub prompts: BoardPrompts,
 }
 
-impl Default for BoardConfig {
-    fn default() -> Self {
-        Self {
-            mode: Default::default(),
-            prompts: Default::default(),
-        }
-    }
-}
+
 
 /// Game-constant and dynamic board data
 #[derive(Debug, Clone, Serialize, Deserialize)]

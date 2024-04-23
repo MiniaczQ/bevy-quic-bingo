@@ -23,7 +23,7 @@ where
 {
     pub fn new(runtime: tokio::runtime::Handle) -> Self {
         let mut this = Self {
-            runtime: runtime,
+            runtime,
             data: Default::default(),
             save_task: Default::default(),
             load_task: Default::default(),

@@ -1,6 +1,3 @@
-#[path = "../common/mod.rs"]
-mod common;
-
 use std::collections::HashMap;
 
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
@@ -18,7 +15,7 @@ use common::{
     BoardRes,
 };
 
-use crate::common::bingo::GameMode;
+use common::bingo::GameMode;
 
 #[derive(Resource, Debug, Clone, Default)]
 struct Clients {
@@ -26,7 +23,7 @@ struct Clients {
 }
 
 fn broadcast(endpoint: &Endpoint, clients: &Clients, msg: ServerMessage) {
-    endpoint.try_send_group_message(clients.data.keys().into_iter(), msg);
+    endpoint.try_send_group_message(clients.data.keys(), msg);
 }
 
 fn handle_messages(
@@ -55,12 +52,7 @@ fn handle_single_message(
                 return;
             }
 
-            if clients
-                .data
-                .values()
-                .find(|x| &x.username == &username)
-                .is_some()
-            {
+            if clients.data.values().any(|x| x.username == username) {
                 endpoint.disconnect_client(client_id).unwrap();
                 return;
             }
@@ -94,7 +86,7 @@ fn handle_single_message(
                 .unwrap();
             broadcast(
                 endpoint,
-                &clients,
+                clients,
                 ServerMessage::SetClients(clients.data.clone()),
             );
         }
@@ -107,7 +99,7 @@ fn handle_single_message(
             client.team = new_team;
             broadcast(
                 endpoint,
-                &clients,
+                clients,
                 ServerMessage::SetClients(clients.data.clone()),
             );
         }
@@ -132,8 +124,8 @@ fn handle_single_message(
             };
 
             broadcast(
-                &endpoint,
-                &clients,
+                endpoint,
+                clients,
                 ServerMessage::SetActivity(board.activity.clone()),
             );
         }
@@ -144,7 +136,7 @@ fn handle_single_message(
             }
             board.config.mode = mode.clone();
             board.reset_activity();
-            broadcast(&endpoint, &clients, ServerMessage::SetMode(mode));
+            broadcast(endpoint, clients, ServerMessage::SetMode(mode));
         }
         ClientMessage::SetPrompts(prompts) => {
             let client = clients.data.get_mut(&client_id).unwrap();
@@ -153,7 +145,7 @@ fn handle_single_message(
             }
             board.config.prompts = prompts.clone();
             board.reset_activity();
-            broadcast(&endpoint, &clients, ServerMessage::SetPrompts(prompts));
+            broadcast(endpoint, clients, ServerMessage::SetPrompts(prompts));
         }
         ClientMessage::ResetActivity => {
             let client = clients.data.get_mut(&client_id).unwrap();
@@ -162,8 +154,8 @@ fn handle_single_message(
             }
             board.reset_activity();
             broadcast(
-                &endpoint,
-                &clients,
+                endpoint,
+                clients,
                 ServerMessage::SetActivity(board.activity.clone()),
             );
         }
@@ -193,7 +185,7 @@ fn handle_disconnect(endpoint: &mut Endpoint, clients: &mut Clients, client_id: 
         }
         broadcast(
             endpoint,
-            &clients,
+            clients,
             ServerMessage::SetClients(clients.data.clone()),
         );
     }

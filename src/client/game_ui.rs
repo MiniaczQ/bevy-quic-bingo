@@ -9,13 +9,14 @@ use bevy_quinnet::client::Client;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 
+use common::{
+    bingo::{Board, BoardPrompts, GameMode, WinCondition},
+    protocol::{ClientMessage, ClientProps},
+    teams::Team,
+    BoardRes, ConfMode, ConfPrompts,
+};
+
 use crate::{
-    common::{
-        bingo::{Board, BoardPrompts, GameMode, WinCondition},
-        protocol::{ClientMessage, ClientProps},
-        teams::Team,
-        BoardRes, ConfMode, ConfPrompts,
-    },
     connecting::{StopConnection, TeamWon},
     fit_text::PromptLayoutCache,
     scoped::Scoped,
@@ -86,12 +87,8 @@ fn teams_selector(ui: &mut egui::Ui, client_props: &mut ClientProps) -> bool {
         let mut iter = Team::iter();
         for _ in 0..2 {
             for _ in 0..4 {
-                clicked |= team_to_ui(
-                    ui,
-                    &mut client_props.team,
-                    Some(iter.next().unwrap().clone()),
-                )
-                .clicked();
+                clicked |=
+                    team_to_ui(ui, &mut client_props.team, Some(*iter.next().unwrap())).clicked();
             }
             ui.end_row()
         }
@@ -138,6 +135,7 @@ impl StoragePath for PromptsString {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn game_menu_ui(
     mut egui_ctx: Query<&mut EguiContext, With<PrimaryWindow>>,
     mut disconnect_events: EventWriter<StopConnection>,
@@ -411,7 +409,7 @@ fn size_from_board(prompts: &BoardPrompts) -> (f32, f32) {
     let x_size = prompts.x_size as f32;
     let width = x_size * FIELD_SIZE + (x_size + 1.0) * GAP_SIZE;
 
-    return (width, height);
+    (width, height)
 }
 
 fn create_bingo_window(
@@ -505,7 +503,7 @@ fn bingo_board_ui(
                                 playable_bingo_field(
                                     ui,
                                     &mut board,
-                                    &client_props,
+                                    client_props,
                                     &client,
                                     (x, y),
                                     &mut prompt_layout_cache,
@@ -564,7 +562,7 @@ fn playable_bingo_field(
     );
 
     for (i, team) in Team::iter().enumerate() {
-        if activity.contains(&team) {
+        if activity.contains(team) {
             let x_offset = (i % 4) as f32 * x_step;
             let y_offset = (i / 4) as f32 * y_step * 3.0;
             let pos1 = pos + egui::Vec2::new(x_offset, y_offset);

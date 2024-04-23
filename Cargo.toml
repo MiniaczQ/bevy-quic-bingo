@@ -3,6 +3,10 @@ name = "bingo"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "common"
+path = "src/common/lib.rs"
+
 [[bin]]
 name = "bingo-server"
 path = "src/server/main.rs"

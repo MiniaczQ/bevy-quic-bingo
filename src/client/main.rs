@@ -1,16 +1,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-#[path = "../common/mod.rs"]
-mod common;
 mod connecting;
 mod fit_text;
 mod game_ui;
 mod menu_ui;
 mod scoped;
 mod states;
+mod storage;
 mod ui;
 mod userdata;
-mod storage;
 
 use bevy::{
     prelude::*,
